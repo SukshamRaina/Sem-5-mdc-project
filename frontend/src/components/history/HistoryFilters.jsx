@@ -1,5 +1,5 @@
 import React from 'react';
-import { Filter, RefreshCw, Search } from 'lucide-react';
+import { Filter, RefreshCw } from 'lucide-react';
 
 export default function HistoryFilters({
   engineId,

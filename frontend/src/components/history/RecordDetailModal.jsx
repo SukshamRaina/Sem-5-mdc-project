@@ -1,11 +1,5 @@
 import React from 'react';
 import {
-  Calendar,
-  Cpu,
-  Database,
-  FileText,
-  Gauge,
-  Layers,
   Wrench,
 } from 'lucide-react';
 import Modal from '../common/Modal';

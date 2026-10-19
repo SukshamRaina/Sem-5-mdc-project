@@ -2,7 +2,7 @@ import React from 'react';
 import { Cpu, Database, Layers, Shield, Sliders } from 'lucide-react';
 import Card from '../common/Card';
 
-export default function SystemHealthCard({ health, isCheckingHealth }) {
+export default function SystemHealthCard({ health }) {
   const isHealthy = health?.status === 'healthy';
 
   return (

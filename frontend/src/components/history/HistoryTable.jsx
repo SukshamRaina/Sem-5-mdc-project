@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Database, ExternalLink, HelpCircle, Inbox } from 'lucide-react';
+import { ExternalLink, Inbox } from 'lucide-react';
 import Badge from '../common/Badge';
 import LoadingSpinner from '../common/LoadingSpinner';
 import RecordDetailModal from './RecordDetailModal';

@@ -11,6 +11,7 @@ backend/.env.*
 *.env.*
 !.env.example
 !backend/.env.example
+!frontend/.env.example
 
 # 2. Python Bytecode, Caches & Testing
 __pycache__/

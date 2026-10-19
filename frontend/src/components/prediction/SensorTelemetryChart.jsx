@@ -13,6 +13,42 @@ import { Activity, Sliders, Info } from 'lucide-react';
 import Card from '../common/Card';
 import { SENSOR_METADATA } from '../../constants/sensorMetadata';
 
+function SensorTooltipRenderer({ active, payload, label, primarySensor, primaryMeta, secondaryMeta }) {
+  if (active && payload && payload.length) {
+    return (
+      <div className="recharts-custom-tooltip">
+        <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+          Flight Cycle #{label} (Observed)
+        </div>
+        {payload.map((entry, index) => {
+          const isPrimary = entry.dataKey === primarySensor;
+          const meta = isPrimary ? primaryMeta : secondaryMeta;
+          return (
+            <div
+              key={index}
+              style={{
+                color: entry.color,
+                fontWeight: 500,
+                fontSize: '12px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: '12px',
+              }}
+            >
+              <span>{meta ? `${meta.name} (${meta.fullName})` : entry.name}:</span>
+              <span style={{ fontWeight: 700 }}>
+                {typeof entry.value === 'number' ? entry.value.toFixed(3) : entry.value}{' '}
+                {meta?.unit}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return null;
+}
+
 export default function SensorTelemetryChart({ sensorData, engineId }) {
   const [primarySensor, setPrimarySensor] = useState('sensor_11'); // HPC outlet static pressure (top correlated)
   const [secondarySensor, setSecondarySensor] = useState('sensor_4'); // LPT outlet temperature
@@ -53,42 +89,6 @@ export default function SensorTelemetryChart({ sensorData, engineId }) {
           unit: '',
         }
       : null;
-
-  const CustomSensorTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="recharts-custom-tooltip">
-          <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
-            Flight Cycle #{label} (Observed)
-          </div>
-          {payload.map((entry, index) => {
-            const isPrimary = entry.dataKey === primarySensor;
-            const meta = isPrimary ? primaryMeta : secondaryMeta;
-            return (
-              <div
-                key={index}
-                style={{
-                  color: entry.color,
-                  fontWeight: 500,
-                  fontSize: '12px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: '12px',
-                }}
-              >
-                <span>{meta ? `${meta.name} (${meta.fullName})` : entry.name}:</span>
-                <span style={{ fontWeight: 700 }}>
-                  {typeof entry.value === 'number' ? entry.value.toFixed(3) : entry.value}{' '}
-                  {meta?.unit}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      );
-    }
-    return null;
-  };
 
   return (
     <Card
@@ -223,7 +223,16 @@ export default function SensorTelemetryChart({ sensorData, engineId }) {
                 }}
               />
             )}
-            <Tooltip content={<CustomSensorTooltip />} />
+            <Tooltip
+              content={(props) => (
+                <SensorTooltipRenderer
+                  {...props}
+                  primarySensor={primarySensor}
+                  primaryMeta={primaryMeta}
+                  secondaryMeta={secondaryMeta}
+                />
+              )}
+            />
             <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '12px' }} />
 
             <Line

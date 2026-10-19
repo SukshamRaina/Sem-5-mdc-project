@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import Papa from 'papaparse';
 import {
   Activity,
   ArrowRight,
   Database,
-  FileText,
   Play,
   RotateCcw,
-  Sparkles,
   UploadCloud,
 } from 'lucide-react';
 
@@ -17,6 +14,9 @@ import {
   predictFromCsv,
   getPredictions,
 } from './services/api';
+
+// Parsing Utility
+import { parseTelemetry } from './utils/telemetryParser';
 
 // Layout Components
 import Header from './components/layout/Header';
@@ -49,35 +49,6 @@ import HistoryFilters from './components/history/HistoryFilters';
 import HistoryTable from './components/history/HistoryTable';
 import HistoryPagination from './components/history/HistoryPagination';
 
-const RAW_COLUMN_NAMES = [
-  'unit_number',
-  'time_cycles',
-  'setting_1',
-  'setting_2',
-  'setting_3',
-  'sensor_1',
-  'sensor_2',
-  'sensor_3',
-  'sensor_4',
-  'sensor_5',
-  'sensor_6',
-  'sensor_7',
-  'sensor_8',
-  'sensor_9',
-  'sensor_10',
-  'sensor_11',
-  'sensor_12',
-  'sensor_13',
-  'sensor_14',
-  'sensor_15',
-  'sensor_16',
-  'sensor_17',
-  'sensor_18',
-  'sensor_19',
-  'sensor_20',
-  'sensor_21',
-];
-
 export default function App() {
   // Navigation & Health State
   const [activeTab, setActiveTab] = useState('overview');
@@ -90,6 +61,7 @@ export default function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState(null);
+  const [parserNotice, setParserNotice] = useState(null);
 
   // Prediction Response State
   const [predictionResponse, setPredictionResponse] = useState(null);
@@ -148,83 +120,37 @@ export default function App() {
     fetchHistory();
   }, [checkHealthStatus, fetchHistory]);
 
-  // Parse Uploaded CSV File locally to extract real sensor observation values for visualization
-  const parseLocalFileForSensorCurves = (file) => {
-    if (!file) return;
+  // Robust parsing of uploaded CSV / TXT telemetry using telemetryParser
+  const parseLocalFileForSensorCurves = async (file) => {
+    if (!file) {
+      setFileRowCount(null);
+      setParsedSensorDataByEngine({});
+      setParserNotice(null);
+      return;
+    }
 
-    Papa.parse(file, {
-      dynamicTyping: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        if (!results.data || results.data.length === 0) return;
-
-        const rows = results.data;
-        const firstRow = rows[0];
-        const isHeaderRow =
-          typeof firstRow[0] === 'string' &&
-          (firstRow[0].toLowerCase().includes('unit') ||
-            firstRow.some((col) => String(col).toLowerCase().includes('sensor')));
-
-        let parsedRows = [];
-
-        if (isHeaderRow) {
-          const headers = firstRow.map((h) => String(h).trim().toLowerCase());
-          for (let i = 1; i < rows.length; i++) {
-            const rowObj = {};
-            headers.forEach((h, idx) => {
-              rowObj[h] = rows[i][idx];
-            });
-            parsedRows.push(rowObj);
-          }
+    try {
+      const result = await parseTelemetry(file);
+      if (result.success) {
+        setFileRowCount(result.rowCount);
+        setParsedSensorDataByEngine(result.enginesData);
+        if (result.warnings && result.warnings.length > 0) {
+          setParserNotice(result.warnings.join(' '));
         } else {
-          // Space or delimited raw NASA C-MAPSS rows (26 columns)
-          for (let i = 0; i < rows.length; i++) {
-            const raw = rows[i];
-            const rowObj = {};
-            RAW_COLUMN_NAMES.forEach((colName, idx) => {
-              rowObj[colName] = raw[idx];
-            });
-            parsedRows.push(rowObj);
-          }
+          setParserNotice(null);
         }
-
-        // Set row count
-        setFileRowCount(parsedRows.length);
-
-        // Group by engine unit_number
-        const grouped = {};
-        parsedRows.forEach((r) => {
-          const unit = r.unit_number || 1;
-          const cycle = r.time_cycles || r.cycle || 1;
-          if (!grouped[unit]) grouped[unit] = [];
-
-          // Format clean row for Recharts
-          const chartRow = {
-            cycle: Number(cycle),
-            unit_number: Number(unit),
-          };
-
-          // Attach all numeric sensor readings
-          Object.keys(r).forEach((k) => {
-            if (k.startsWith('sensor_') && typeof r[k] === 'number') {
-              chartRow[k] = r[k];
-            }
-          });
-
-          grouped[unit].push(chartRow);
-        });
-
-        // Sort each engine's points by cycle
-        Object.keys(grouped).forEach((unit) => {
-          grouped[unit].sort((a, b) => a.cycle - b.cycle);
-        });
-
-        setParsedSensorDataByEngine(grouped);
-      },
-      error: (err) => {
-        console.warn('Local CSV parse warning:', err);
-      },
-    });
+      } else {
+        setFileRowCount(null);
+        setParsedSensorDataByEngine({});
+        setParserNotice(
+          `Local sensor visualization preview note: ${result.error}. (The FastAPI backend will perform authoritative validation upon prediction).`
+        );
+      }
+    } catch (err) {
+      setFileRowCount(null);
+      setParsedSensorDataByEngine({});
+      setParserNotice(`Unable to parse sensor observation curves: ${err.message}`);
+    }
   };
 
   // Handle File Selection
@@ -284,6 +210,11 @@ export default function App() {
       ? parsedSensorDataByEngine[selectedEngineId]
       : parsedSensorDataByEngine[Object.keys(parsedSensorDataByEngine)[0]] || [];
 
+  // Count distinct engines in loaded page 1 history records
+  const distinctEnginesInLoadedHistory = new Set(
+    historyRecords.map((r) => r.engine_id)
+  ).size;
+
   return (
     <div className="app-container">
       {/* Top Header */}
@@ -317,14 +248,14 @@ export default function App() {
                 Turbofan Fleet Status & System Health
               </h2>
               <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Real-time operational dashboard for NASA C-MAPSS FD001 engine degradation analysis.
+                Operational dashboard for NASA C-MAPSS FD001 engine degradation analysis.
               </p>
             </div>
 
             {/* Live Backend & ML State */}
-            <SystemHealthCard health={health} isCheckingHealth={isCheckingHealth} />
+            <SystemHealthCard health={health} />
 
-            {/* Fleet KPI Metric Cards */}
+            {/* Section 1: Active Inference Fleet Summary */}
             <div style={{ margin: '24px 0 8px 0' }}>
               <div
                 style={{
@@ -335,43 +266,129 @@ export default function App() {
                 }}
               >
                 <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
-                  Fleet Health Overview
+                  Active Batch Fleet Summary
                 </h3>
-                {predictionResponse && (
+                {predictionResponse ? (
+                  <span
+                    className="badge badge-healthy"
+                    style={{ textTransform: 'none', fontWeight: 500 }}
+                  >
+                    Latest Run: {predictionResponse.fleet_summary.total_engines} engine(s) evaluated
+                  </span>
+                ) : (
                   <span
                     className="badge badge-neutral"
                     style={{ textTransform: 'none', fontWeight: 500 }}
                   >
-                    Based on latest inference run ({predictionResponse.fleet_summary.total_engines} engines)
+                    Awaiting Ingestion
                   </span>
                 )}
               </div>
 
               <FleetSummaryCards
-                summary={
-                  predictionResponse
-                    ? predictionResponse.fleet_summary
-                    : {
-                        total_engines: historyTotal > 0 ? historyTotal : 0,
-                        critical_count: historyRecords.filter((r) => r.risk_level === 'CRITICAL').length,
-                        warning_count: historyRecords.filter((r) => r.risk_level === 'WARNING').length,
-                        moderate_count: historyRecords.filter((r) => r.risk_level === 'MODERATE').length,
-                        healthy_count: historyRecords.filter((r) => r.risk_level === 'HEALTHY').length,
-                        avg_rul:
-                          historyRecords.length > 0
-                            ? Math.round(
-                                (historyRecords.reduce((acc, r) => acc + r.predicted_rul, 0) /
-                                  historyRecords.length) *
-                                  10
-                              ) / 10
-                            : 0,
-                        min_rul:
-                          historyRecords.length > 0
-                            ? Math.min(...historyRecords.map((r) => r.predicted_rul))
-                            : 0,
-                      }
-                }
+                summary={predictionResponse ? predictionResponse.fleet_summary : null}
+                onNavigateToUpload={() => setActiveTab('predict')}
               />
+            </div>
+
+            {/* Section 2: Database Activity Summary (Transparently separated) */}
+            <div style={{ margin: '24px 0 16px 0' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '12px',
+                }}
+              >
+                <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
+                  Database Historical Records Activity
+                </h3>
+                <span
+                  className="badge badge-neutral"
+                  style={{ textTransform: 'none', fontWeight: 500 }}
+                >
+                  Persistent Supabase Log
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: '16px',
+                }}
+              >
+                <div
+                  style={{
+                    padding: '16px',
+                    backgroundColor: '#ffffff',
+                    border: '1px solid var(--border-light)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: 'var(--shadow-xs)',
+                  }}
+                >
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    TOTAL LOGGED PREDICTIONS
+                  </div>
+                  <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-main)', margin: '4px 0' }}>
+                    {historyTotal.toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    Total records stored in database
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: '16px',
+                    backgroundColor: '#ffffff',
+                    border: '1px solid var(--border-light)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: 'var(--shadow-xs)',
+                  }}
+                >
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    LOADED RECORDS (PAGE {historyPage})
+                  </div>
+                  <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-main)', margin: '4px 0' }}>
+                    {historyRecords.length}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    {distinctEnginesInLoadedHistory} distinct engine unit(s) on page
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: '16px',
+                    backgroundColor: '#ffffff',
+                    border: '1px solid var(--border-light)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: 'var(--shadow-xs)',
+                  }}
+                >
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    DATABASE MODE
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '18px',
+                      fontWeight: 700,
+                      color:
+                        health?.database_connected && health?.database_type === 'supabase'
+                          ? 'var(--healthy-main)'
+                          : 'var(--text-main)',
+                      margin: '8px 0',
+                    }}
+                  >
+                    {health?.database_type === 'supabase' ? 'Supabase Cloud' : 'In-Memory Fallback'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    {health?.database_connected ? 'Connected with UUID keys' : 'Resilient local mode'}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Quick Action Navigation Buttons */}
@@ -504,9 +521,19 @@ export default function App() {
               </Alert>
             )}
 
+            {parserNotice && (
+              <Alert
+                type="warning"
+                title="Telemetry Parser Note"
+                onClose={() => setParserNotice(null)}
+              >
+                {parserNotice}
+              </Alert>
+            )}
+
             <Card
               title="Select or Upload Engine Sensor Data"
-              subtitle="Accepts standard comma-delimited CSV with sensor headers or raw 26-column C-MAPSS space-separated format"
+              subtitle="Supports NASA C-MAPSS 26-column space-separated format or standard CSV with headers"
               icon={UploadCloud}
             >
               {/* Drop Zone */}
@@ -525,10 +552,14 @@ export default function App() {
                   onRemove={() => {
                     setSelectedFile(null);
                     setFileRowCount(null);
+                    setParsedSensorDataByEngine({});
+                    setParserNotice(null);
                   }}
                   onReplace={() => {
                     setSelectedFile(null);
                     setFileRowCount(null);
+                    setParsedSensorDataByEngine({});
+                    setParserNotice(null);
                   }}
                   disabled={isUploading}
                 />

@@ -3,8 +3,16 @@
  * Strictly adheres to FastAPI Phase 2 request and response contracts.
  */
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+export const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (typeof envUrl === 'string' && envUrl.trim() !== '') {
+    return envUrl.trim().replace(/\/+$/, '');
+  }
+  // Default to relative root (leverages Vite dev proxy) or direct backend
+  return '';
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -60,7 +68,8 @@ async function parseErrorResponse(response) {
  */
 export async function getHealth() {
   try {
-    const response = await fetch(`${API_BASE_URL}/health`, {
+    const targetUrl = API_BASE_URL ? `${API_BASE_URL}/health` : '/health';
+    const response = await fetch(targetUrl, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -74,8 +83,9 @@ export async function getHealth() {
     return await response.json();
   } catch (error) {
     if (error instanceof ApiError) throw error;
+    const location = API_BASE_URL || window?.location?.origin || 'http://127.0.0.1:8000';
     throw new ApiError(
-      `Unable to reach backend at ${API_BASE_URL}. Ensure FastAPI service is running.`,
+      `Unable to reach backend at ${location}. Ensure FastAPI service is running.`,
       0,
       error
     );
@@ -93,7 +103,7 @@ export function predictFromCsv(file, includeTrajectory = true, onProgress = null
       return reject(new ApiError('No file selected for prediction.', 400));
     }
 
-    const fileName = file.name.toLowerCase();
+    const fileName = (file.name || '').toLowerCase();
     if (!fileName.endsWith('.csv') && !fileName.endsWith('.txt')) {
       return reject(
         new ApiError(
@@ -122,7 +132,8 @@ export function predictFromCsv(file, includeTrajectory = true, onProgress = null
     formData.append('file', file);
 
     const xhr = new XMLHttpRequest();
-    const url = `${API_BASE_URL}/predict?include_trajectory=${encodeURIComponent(includeTrajectory)}`;
+    const endpoint = API_BASE_URL ? `${API_BASE_URL}/predict` : '/predict';
+    const url = `${endpoint}?include_trajectory=${encodeURIComponent(includeTrajectory)}`;
 
     xhr.open('POST', url);
     xhr.setRequestHeader('Accept', 'application/json');
@@ -162,9 +173,10 @@ export function predictFromCsv(file, includeTrajectory = true, onProgress = null
     };
 
     xhr.onerror = () => {
+      const location = API_BASE_URL || window?.location?.origin || 'http://127.0.0.1:8000';
       reject(
         new ApiError(
-          `Network connection error communicating with FastAPI backend at ${API_BASE_URL}.`,
+          `Network connection error communicating with FastAPI backend at ${location}.`,
           0
         )
       );
@@ -184,7 +196,8 @@ export function predictFromCsv(file, includeTrajectory = true, onProgress = null
  */
 export async function predictFromRawCsv(csvData, includeTrajectory = true) {
   try {
-    const response = await fetch(`${API_BASE_URL}/predict/raw`, {
+    const targetUrl = API_BASE_URL ? `${API_BASE_URL}/predict/raw` : '/predict/raw';
+    const response = await fetch(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -228,7 +241,8 @@ export async function getPredictions({
       params.set('risk_level', String(riskLevel).toUpperCase());
     }
 
-    const response = await fetch(`${API_BASE_URL}/predictions?${params.toString()}`, {
+    const endpoint = API_BASE_URL ? `${API_BASE_URL}/predictions` : '/predictions';
+    const response = await fetch(`${endpoint}?${params.toString()}`, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -251,15 +265,16 @@ export async function getPredictions({
  */
 export async function getPredictionById(predictionId) {
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/predictions/${encodeURIComponent(predictionId)}`,
-      {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-        },
-      }
-    );
+    const endpoint = API_BASE_URL
+      ? `${API_BASE_URL}/predictions/${encodeURIComponent(predictionId)}`
+      : `/predictions/${encodeURIComponent(predictionId)}`;
+
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
 
     if (!response.ok) {
       throw await parseErrorResponse(response);

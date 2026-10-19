@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, FileText, CheckCircle2 } from 'lucide-react';
+import { UploadCloud } from 'lucide-react';
 
 export default function FileUploadZone({
   onFileSelected,

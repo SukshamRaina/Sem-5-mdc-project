@@ -1,11 +1,7 @@
 import React from 'react';
 import {
-  AlertTriangle,
-  Clock,
   Database,
-  FileCheck2,
   Gauge,
-  HelpCircle,
   Info,
   Wrench,
 } from 'lucide-react';

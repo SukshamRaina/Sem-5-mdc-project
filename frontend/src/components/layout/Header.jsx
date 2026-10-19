@@ -4,7 +4,6 @@ import { Activity, Cpu, Database, RefreshCw } from 'lucide-react';
 export default function Header({ health, isCheckingHealth, onRefreshHealth }) {
   const isHealthy = health?.status === 'healthy';
   const isDegraded = health?.status === 'degraded';
-  const isOffline = !health;
 
   return (
     <header className="top-header">

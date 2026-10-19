@@ -14,6 +14,38 @@ import { TrendingDown, Info } from 'lucide-react';
 import Card from '../common/Card';
 import { getRiskInfo } from '../../constants/sensorMetadata';
 
+function renderTrajectoryTooltip({ active, payload, label }) {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    const riskInfo = getRiskInfo(data.risk_level);
+    return (
+      <div className="recharts-custom-tooltip">
+        <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+          Flight Cycle #{label}
+        </div>
+        <div style={{ color: 'var(--primary-700)', fontWeight: 600 }}>
+          Estimated RUL: {data.predicted_rul} cycles
+        </div>
+        <div style={{ marginTop: '4px' }}>
+          <span
+            style={{
+              fontSize: '11px',
+              fontWeight: 600,
+              color: riskInfo.color,
+              backgroundColor: riskInfo.bgColor,
+              padding: '2px 6px',
+              borderRadius: '4px',
+            }}
+          >
+            {riskInfo.label}
+          </span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
 export default function TrajectoryChart({ trajectory, engineId }) {
   if (!trajectory || trajectory.length === 0) {
     return (
@@ -31,38 +63,6 @@ export default function TrajectoryChart({ trajectory, engineId }) {
       </Card>
     );
   }
-
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      const riskInfo = getRiskInfo(data.risk_level);
-      return (
-        <div className="recharts-custom-tooltip">
-          <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
-            Flight Cycle #{label}
-          </div>
-          <div style={{ color: 'var(--primary-700)', fontWeight: 600 }}>
-            Estimated RUL: {data.predicted_rul} cycles
-          </div>
-          <div style={{ marginTop: '4px' }}>
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                color: riskInfo.color,
-                backgroundColor: riskInfo.bgColor,
-                padding: '2px 6px',
-                borderRadius: '4px',
-              }}
-            >
-              {riskInfo.label}
-            </span>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
 
   return (
     <Card
@@ -104,7 +104,7 @@ export default function TrajectoryChart({ trajectory, engineId }) {
                 fill: '#64748b',
               }}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={renderTrajectoryTooltip} />
             <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '12px' }} />
 
             {/* Threshold reference lines */}
