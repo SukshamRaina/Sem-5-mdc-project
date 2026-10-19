@@ -41,7 +41,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             len(predictor.feature_columns),
         )
     except Exception as exc:
-        logger.error("Failed to load ML artifacts: %s", str(exc), exc_info=True)
+        logger.critical(
+            "STARTUP FAILURE — ML artifacts could not be loaded: %s. "
+            "All /predict calls will be rejected with HTTP 503 until artifacts are restored.",
+            str(exc),
+            exc_info=True,
+        )
 
     # 2. Check Supabase Connectivity
     client = get_supabase_client()
@@ -70,13 +75,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS for Vite + React frontend
+# Configure CORS — explicit development origins only.
+# Never allow the wildcard origin alongside allow_credentials=True,
+# as browsers reject credentialed cross-origin requests with origin=*.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS + ["*"],  # Allow all for development & local testing
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
 )
 
 # Mount routes under both / and /api/v1 for maximum client compatibility

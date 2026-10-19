@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 def parse_and_validate_csv(
     content: str | bytes,
     required_features: List[str] | None = None,
+    max_rows: int = 50_000,
 ) -> Dict[int, pd.DataFrame]:
     """
     Parses and thoroughly validates an uploaded CSV file.
@@ -68,6 +69,12 @@ def parse_and_validate_csv(
     if df.empty:
         raise ValueError("Uploaded CSV contains no data rows.")
 
+    if len(df) > max_rows:
+        raise ValueError(
+            f"CSV contains {len(df):,} rows which exceeds the "
+            f"{max_rows:,}-row limit. Split the dataset into smaller batches."
+        )
+
     # 3. Handle raw NASA C-MAPSS format without headers (26 numeric columns)
     # If the first row was treated as header but consists of pure numbers:
     is_numeric_header = False
@@ -117,6 +124,17 @@ def parse_and_validate_csv(
                 f"Column '{col}' contains non-numeric or NaN values {bad_values} at rows {bad_rows}."
             )
         df[col] = non_numeric
+
+    # 6b. Reject infinite values (inf / -inf) that pass pd.to_numeric but corrupt LSTM inputs
+    sensor_cols_to_check = [c for c in required_features if c in df.columns]
+    inf_mask = ~np.isfinite(df[sensor_cols_to_check].values)
+    if inf_mask.any():
+        bad_col_idx = int(np.argwhere(inf_mask)[0][1])
+        bad_col = sensor_cols_to_check[bad_col_idx]
+        raise ValueError(
+            f"Column '{bad_col}' contains infinite (inf/-inf) values. "
+            "All sensor readings must be finite real numbers."
+        )
 
     # 7. Cycle ordering & validity
     if (df["time_cycles"] <= 0).any():

@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     MODEL_VERSION: str = "lstm-stacked-v1.0"
     SEQUENCE_LENGTH: int = 30
 
+    # Upload Guard Rails
+    MAX_UPLOAD_BYTES: int = 10 * 1024 * 1024  # 10 MB hard ceiling
+    MAX_CSV_ROWS: int = 50_000                 # row-count ceiling across all engines
+
     # Supabase Database Configuration
     SUPABASE_URL: Optional[str] = None
     SUPABASE_KEY: Optional[str] = None

@@ -161,11 +161,22 @@ async def predict_from_csv(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read uploaded file: {str(exc)}")
 
+    if len(content) > settings.MAX_UPLOAD_BYTES:
+        limit_mb = settings.MAX_UPLOAD_BYTES // (1024 * 1024)
+        raise HTTPException(
+            status_code=413,
+            detail=f"Uploaded file is too large. Maximum allowed size is {limit_mb} MB.",
+        )
+
     predictor = get_predictor_instance()
     required_features = predictor.feature_columns if predictor else None
 
     try:
-        engines_data = parse_and_validate_csv(content, required_features=required_features)
+        engines_data = parse_and_validate_csv(
+            content,
+            required_features=required_features,
+            max_rows=settings.MAX_CSV_ROWS,
+        )
     except ValueError as val_err:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

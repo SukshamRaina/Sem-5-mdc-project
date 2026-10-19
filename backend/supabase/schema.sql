@@ -48,24 +48,56 @@ CREATE INDEX IF NOT EXISTS idx_maintenance_engine_id ON maintenance_records(engi
 CREATE INDEX IF NOT EXISTS idx_maintenance_status ON maintenance_records(status);
 
 -- 5. Row-Level Security (RLS) Configuration
+-- The backend MUST connect using the SUPABASE_SERVICE_ROLE_KEY which bypasses RLS.
+-- These policies apply only when requests arrive via the anon / authenticated key.
 ALTER TABLE predictions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE maintenance_records ENABLE ROW LEVEL SECURITY;
 
--- Allow public read access (for academic dashboard inspection)
-CREATE POLICY "Allow public read access to predictions"
+-- --------------------------------------------------------------------------
+-- predictions: read-only for the anonymous role (React dashboard read path).
+-- All writes come from the backend service-role key and bypass RLS entirely.
+-- --------------------------------------------------------------------------
+CREATE POLICY "anon_read_predictions"
     ON predictions FOR SELECT
+    TO anon
     USING (true);
 
--- Allow backend service key insert/update
-CREATE POLICY "Allow authenticated insert to predictions"
+-- Deny any INSERT/UPDATE/DELETE from the anon or authenticated roles.
+-- (Service-role key bypasses these policies automatically.)
+CREATE POLICY "deny_anon_insert_predictions"
     ON predictions FOR INSERT
-    WITH CHECK (true);
+    TO anon
+    WITH CHECK (false);
 
-CREATE POLICY "Allow public read access to maintenance_records"
+CREATE POLICY "deny_anon_update_predictions"
+    ON predictions FOR UPDATE
+    TO anon
+    USING (false);
+
+CREATE POLICY "deny_anon_delete_predictions"
+    ON predictions FOR DELETE
+    TO anon
+    USING (false);
+
+-- --------------------------------------------------------------------------
+-- maintenance_records: read-only for anon; writes via service-role only.
+-- --------------------------------------------------------------------------
+CREATE POLICY "anon_read_maintenance_records"
     ON maintenance_records FOR SELECT
+    TO anon
     USING (true);
 
-CREATE POLICY "Allow authenticated write to maintenance_records"
-    ON maintenance_records FOR ALL
-    USING (true)
-    WITH CHECK (true);
+CREATE POLICY "deny_anon_insert_maintenance_records"
+    ON maintenance_records FOR INSERT
+    TO anon
+    WITH CHECK (false);
+
+CREATE POLICY "deny_anon_update_maintenance_records"
+    ON maintenance_records FOR UPDATE
+    TO anon
+    USING (false);
+
+CREATE POLICY "deny_anon_delete_maintenance_records"
+    ON maintenance_records FOR DELETE
+    TO anon
+    USING (false);
