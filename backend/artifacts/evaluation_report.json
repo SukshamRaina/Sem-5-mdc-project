@@ -1,0 +1,24 @@
+{
+  "dataset": "NASA C-MAPSS FD001",
+  "num_test_engines": 100,
+  "sequence_length": 30,
+  "models": {
+    "random_forest_baseline": {
+      "rmse": 18.489,
+      "mae": 13.465,
+      "r2_score": 0.802,
+      "nasa_phm_score": 939.54
+    },
+    "stacked_lstm": {
+      "rmse": 14.493,
+      "mae": 11.244,
+      "r2_score": 0.8784,
+      "nasa_phm_score": 319.76
+    }
+  },
+  "performance_gain": {
+    "rmse_improvement_cycles": 3.996,
+    "mae_improvement_cycles": 2.221,
+    "nasa_score_reduction": 619.78
+  }
+}

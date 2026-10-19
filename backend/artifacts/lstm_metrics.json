@@ -1,0 +1,27 @@
+{
+  "model_architecture": "Stacked LSTM (64 -> 32) + Dense(32) + Linear",
+  "sequence_length": 30,
+  "feature_count": 14,
+  "selected_features": [
+    "sensor_2",
+    "sensor_3",
+    "sensor_4",
+    "sensor_7",
+    "sensor_8",
+    "sensor_9",
+    "sensor_11",
+    "sensor_12",
+    "sensor_13",
+    "sensor_14",
+    "sensor_15",
+    "sensor_17",
+    "sensor_20",
+    "sensor_21"
+  ],
+  "training_epochs_run": 35,
+  "validation_rmse": 13.413,
+  "validation_mae": 9.951,
+  "test_rmse": 14.493,
+  "test_mae": 11.244,
+  "test_nasa_score": 319.76
+}

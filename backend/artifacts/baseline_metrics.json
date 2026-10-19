@@ -1,0 +1,11 @@
+{
+  "model_type": "RandomForestRegressor (Baseline)",
+  "train_samples": 16340,
+  "val_samples": 4291,
+  "test_engines": 100,
+  "validation_rmse": 19.659,
+  "validation_mae": 13.953,
+  "test_rmse": 18.489,
+  "test_mae": 13.465,
+  "test_nasa_score": 939.54
+}

@@ -1,0 +1,67 @@
+{
+  "dataset": "NASA C-MAPSS FD001",
+  "total_raw_columns": 26,
+  "selected_features": [
+    "sensor_2",
+    "sensor_3",
+    "sensor_4",
+    "sensor_7",
+    "sensor_8",
+    "sensor_9",
+    "sensor_11",
+    "sensor_12",
+    "sensor_13",
+    "sensor_14",
+    "sensor_15",
+    "sensor_17",
+    "sensor_20",
+    "sensor_21"
+  ],
+  "pruned_features": [
+    "setting_1",
+    "setting_2",
+    "setting_3",
+    "sensor_1",
+    "sensor_5",
+    "sensor_6",
+    "sensor_10",
+    "sensor_16",
+    "sensor_18",
+    "sensor_19"
+  ],
+  "variance_threshold": 0.0001,
+  "feature_count": 14,
+  "top_correlated_sensors": [
+    "sensor_11",
+    "sensor_4",
+    "sensor_12",
+    "sensor_7",
+    "sensor_15",
+    "sensor_21"
+  ],
+  "sensor_descriptions": {
+    "sensor_2": "LPC outlet temperature (T24) [\u00b0R]",
+    "sensor_3": "HPC outlet temperature (T30) [\u00b0R]",
+    "sensor_4": "LPT outlet temperature (T50) [\u00b0R]",
+    "sensor_7": "HPC outlet pressure (P30) [psia]",
+    "sensor_8": "Physical fan speed (Nf) [rpm]",
+    "sensor_9": "Physical core speed (Nc) [rpm]",
+    "sensor_11": "HPC outlet static pressure (Ps30) [psia]",
+    "sensor_12": "Ratio of fuel flow to Ps30 (phi) [pps/psi]",
+    "sensor_13": "Corrected fan speed (Nf_dmd) [rpm]",
+    "sensor_14": "Corrected core speed (Nc_dmd) [rpm]",
+    "sensor_15": "Bypass Ratio (BPR)",
+    "sensor_17": "Bleed Enthalpy (htBleed)",
+    "sensor_20": "HPT coolant bleed (W31) [lbm/s]",
+    "sensor_21": "LPT coolant bleed (W32) [lbm/s]"
+  },
+  "target_column": "rul_clipped",
+  "max_rul_clip": 125,
+  "engine_lifetime_stats": {
+    "min_cycles": 128,
+    "max_cycles": 362,
+    "mean_cycles": 206.31,
+    "median_cycles": 199.0,
+    "std_cycles": 46.3427492067573
+  }
+}
