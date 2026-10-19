@@ -13,44 +13,12 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow import keras
 
+from .explainer import ModelExplainer
 from .preprocessor import CMapssPreprocessor
+from .risk import determine_risk_category, generate_maintenance_recommendation
 from .sequence import create_sequences, create_test_last_sequences
 
 logger = logging.getLogger(__name__)
-
-
-def determine_risk_category(predicted_rul: float) -> Dict[str, str]:
-    """
-    Transparent rule-based risk classification based on predicted Remaining Useful Life:
-    - CRITICAL (RUL <= 25 cycles): Immediate inspection and component replacement required.
-    - WARNING  (25 < RUL <= 50 cycles): Schedule maintenance within the next 20 flight cycles.
-    - MODERATE (50 < RUL <= 80 cycles): Increased sensor monitoring and trend inspection.
-    - HEALTHY  (RUL > 80 cycles): Normal operational status.
-    """
-    if predicted_rul <= 25.0:
-        return {
-            "level": "CRITICAL",
-            "color": "#e53e3e",
-            "action": "Immediate inspection and component replacement required before next flight mission.",
-        }
-    elif predicted_rul <= 50.0:
-        return {
-            "level": "WARNING",
-            "color": "#dd6b20",
-            "action": "Schedule HPC inspection and overhaul within the next 20 flight cycles.",
-        }
-    elif predicted_rul <= 80.0:
-        return {
-            "level": "MODERATE",
-            "color": "#d69e2e",
-            "action": "Monitor sensor drift; flag for routine line maintenance check.",
-        }
-    else:
-        return {
-            "level": "HEALTHY",
-            "color": "#38a169",
-            "action": "Turbofan engine operating within nominal degradation tolerances.",
-        }
 
 
 class CMapssPredictor:
@@ -62,6 +30,7 @@ class CMapssPredictor:
         self.artifacts_dir = Path(artifacts_dir)
         self.preprocessor: Optional[CMapssPreprocessor] = None
         self.model: Optional[keras.Model] = None
+        self.explainer: Optional[ModelExplainer] = None
         self.feature_columns: List[str] = []
         self.sequence_length = 30
         self._is_loaded = False
@@ -87,6 +56,7 @@ class CMapssPredictor:
         else:
             self.feature_columns = self.preprocessor.feature_columns
 
+        self.explainer = ModelExplainer(self.model, self.feature_columns)
         self._is_loaded = True
         logger.info(
             "CMapssPredictor loaded successfully with %d features.",
@@ -127,7 +97,22 @@ class CMapssPredictor:
         raw_pred = float(self.model.predict(X_last, verbose=0).flatten()[0])
         predicted_rul = max(0.0, round(raw_pred, 1))
 
+        # Phase 4: Risk Evaluation and Feature Attribution
         risk = determine_risk_category(predicted_rul)
+
+        explanation = None
+        top_sensors = []
+        if self.explainer is not None:
+            explanation = self.explainer.generate_explanation(X_last, df_sorted)
+            top_sensors = [item["sensor"] for item in explanation.get("top_contributing_sensors", [])]
+
+        recommendation_obj = generate_maintenance_recommendation(
+            predicted_rul=predicted_rul,
+            risk_level=risk["level"],
+            engine_id=engine_id,
+            current_cycle=current_cycle,
+            top_contributing_sensors=top_sensors,
+        )
 
         return {
             "engine_id": engine_id,
@@ -136,10 +121,14 @@ class CMapssPredictor:
             "predicted_rul": predicted_rul,
             "risk_level": risk["level"],
             "risk_color": risk["color"],
-            "recommendation": risk["action"],
+            "recommendation": recommendation_obj["action"],
             "padded_sequence": is_padded,
             "sequence_length_used": self.sequence_length,
             "features_used": self.feature_columns,
+            "priority": recommendation_obj["priority"],
+            "risk_assessment": risk,
+            "maintenance_recommendation": recommendation_obj,
+            "explanation": explanation,
         }
 
     def predict_trajectory(self, engine_df: pd.DataFrame) -> List[Dict[str, Any]]:

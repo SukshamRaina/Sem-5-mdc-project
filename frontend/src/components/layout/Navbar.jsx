@@ -1,9 +1,9 @@
-import React from 'react';
 import {
   LayoutDashboard,
   UploadCloud,
   LineChart,
   History,
+  Wrench,
 } from 'lucide-react';
 
 export default function Navbar({
@@ -27,6 +27,11 @@ export default function Navbar({
       label: 'Results & Sensor Analytics',
       icon: LineChart,
       badge: hasActivePrediction ? 'Active' : null,
+    },
+    {
+      id: 'maintenance',
+      label: 'Maintenance & Scheduling',
+      icon: Wrench,
     },
     {
       id: 'history',

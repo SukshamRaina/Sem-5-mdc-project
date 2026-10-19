@@ -71,6 +71,10 @@ def _run_inference_on_engines(
             recommendation=pred_dict["recommendation"],
             padded_sequence=pred_dict["padded_sequence"],
             trajectory=trajectory_points,
+            priority=pred_dict.get("priority", "P4_DEFERRED"),
+            risk_assessment=pred_dict.get("risk_assessment"),
+            maintenance_recommendation=pred_dict.get("maintenance_recommendation"),
+            explanation=pred_dict.get("explanation"),
         )
         predictions_list.append(engine_pred)
 
@@ -89,6 +93,10 @@ def _run_inference_on_engines(
                 "input_metadata": {
                     "padded_sequence": pred_dict["padded_sequence"],
                     "sequence_length": pred_dict["sequence_length_used"],
+                    "priority": pred_dict.get("priority"),
+                    "risk_assessment": pred_dict.get("risk_assessment"),
+                    "maintenance_recommendation": pred_dict.get("maintenance_recommendation"),
+                    "explanation": pred_dict.get("explanation"),
                 },
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -125,6 +133,21 @@ def _run_inference_on_engines(
         highest_risk_engine_id=highest_risk_engine,
     )
 
+    # Phase 4: Automated fleet maintenance schedule
+    from backend.app.ml.scheduler import schedule_fleet_maintenance
+    fleet_schedule = schedule_fleet_maintenance(
+        [
+            {
+                "engine_id": p.engine_id,
+                "predicted_rul": p.predicted_rul,
+                "current_cycle": p.current_cycle,
+                "priority": p.priority,
+                "risk_level": p.risk_level,
+            }
+            for p in predictions_list
+        ]
+    )
+
     db_status = "saved_to_supabase" if settings.SUPABASE_URL else "saved_in_memory"
 
     return PredictionResponse(
@@ -136,6 +159,7 @@ def _run_inference_on_engines(
         features_used=predictor.feature_columns,
         timestamp=datetime.now(timezone.utc).isoformat(),
         database_status=db_status,
+        fleet_schedule=fleet_schedule,
     )
 
 

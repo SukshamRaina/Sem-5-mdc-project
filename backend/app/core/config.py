@@ -30,6 +30,16 @@ class Settings(BaseSettings):
     MAX_UPLOAD_BYTES: int = 10 * 1024 * 1024  # 10 MB hard ceiling
     MAX_CSV_ROWS: int = 50_000                 # row-count ceiling across all engines
 
+    # Phase 4: Configurable Risk Thresholds (Operational flight cycles)
+    # NOTE: Academic prototype decision-support rules; not certified aviation maintenance limits.
+    RISK_THRESHOLD_CRITICAL: float = 25.0
+    RISK_THRESHOLD_WARNING: float = 50.0
+    RISK_THRESHOLD_MODERATE: float = 80.0
+
+    # Phase 4: Maintenance Scheduling Policy Defaults
+    DEFAULT_HANGAR_CAPACITY: int = 2
+    DEFAULT_MAINTENANCE_LEAD_TIME: int = 5
+
     # Supabase Database Configuration
     SUPABASE_URL: Optional[str] = None
     SUPABASE_KEY: Optional[str] = None

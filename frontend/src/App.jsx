@@ -13,6 +13,7 @@ import {
   getHealth,
   predictFromCsv,
   getPredictions,
+  getFleetSchedule,
 } from './services/api';
 
 // Parsing Utility
@@ -43,6 +44,11 @@ import EngineSelector from './components/prediction/EngineSelector';
 import EngineRulCard from './components/prediction/EngineRulCard';
 import TrajectoryChart from './components/prediction/TrajectoryChart';
 import SensorTelemetryChart from './components/prediction/SensorTelemetryChart';
+import ExplanationPanel from './components/prediction/ExplanationPanel';
+
+// Maintenance & Optimization Components
+import FleetSchedulerCard from './components/maintenance/FleetSchedulerCard';
+import MaintenanceRecordsView from './components/maintenance/MaintenanceRecordsView';
 
 // History Components
 import HistoryFilters from './components/history/HistoryFilters';
@@ -67,6 +73,11 @@ export default function App() {
   const [predictionResponse, setPredictionResponse] = useState(null);
   const [selectedEngineId, setSelectedEngineId] = useState(null);
   const [parsedSensorDataByEngine, setParsedSensorDataByEngine] = useState({});
+
+  // Fleet Scheduling & Maintenance State (Phase 4)
+  const [fleetSchedule, setFleetSchedule] = useState(null);
+  const [isScheduleLoading, setIsScheduleLoading] = useState(false);
+  const [workOrderPreFill, setWorkOrderPreFill] = useState(null);
 
   // History State
   const [historyRecords, setHistoryRecords] = useState([]);
@@ -178,6 +189,10 @@ export default function App() {
 
       setPredictionResponse(response);
 
+      if (response.fleet_schedule) {
+        setFleetSchedule(response.fleet_schedule);
+      }
+
       // Auto-select first engine
       if (response.predictions && response.predictions.length > 0) {
         setSelectedEngineId(response.predictions[0].engine_id);
@@ -198,6 +213,38 @@ export default function App() {
       setUploadProgress(0);
     }
   };
+
+  // Fleet Scheduling Capacity Updater
+  const handleUpdateScheduleCapacity = useCallback(async (hangarCapacity, leadTimeCycles) => {
+    setIsScheduleLoading(true);
+    try {
+      const engines = predictionResponse?.predictions?.map((p) => ({
+        engine_id: p.engine_id,
+        predicted_rul: p.predicted_rul,
+        current_cycle: p.current_cycle,
+        priority: p.priority || p.maintenance_recommendation?.priority || 'P3_ROUTINE',
+        risk_level: p.risk_level,
+      })) || null;
+
+      const scheduleData = await getFleetSchedule({
+        hangarCapacity,
+        leadTimeCycles,
+        engines,
+      });
+      setFleetSchedule(scheduleData);
+    } catch (err) {
+      console.warn('Failed to update fleet schedule:', err);
+    } finally {
+      setIsScheduleLoading(false);
+    }
+  }, [predictionResponse]);
+
+  // Load schedule if entering maintenance tab with empty schedule
+  useEffect(() => {
+    if (activeTab === 'maintenance' && !fleetSchedule) {
+      handleUpdateScheduleCapacity(2, 5);
+    }
+  }, [activeTab, fleetSchedule, handleUpdateScheduleCapacity]);
 
   // Selected engine prediction object
   const currentEnginePrediction =
@@ -686,13 +733,73 @@ export default function App() {
                     sensorData={currentEngineSensorData}
                     engineId={currentEnginePrediction?.engine_id}
                   />
+
+                  {/* Explainability & Feature Attribution */}
+                  <ExplanationPanel
+                    explanation={currentEnginePrediction?.explanation}
+                    engineId={currentEnginePrediction?.engine_id}
+                  />
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {/* TAB 4: PREDICTION HISTORY */}
+        {/* TAB 4: MAINTENANCE & SCHEDULING (PHASE 4) */}
+        {activeTab === 'maintenance' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+                marginBottom: '4px',
+              }}
+            >
+              <div>
+                <h2
+                  style={{
+                    fontSize: '20px',
+                    fontWeight: 700,
+                    color: 'var(--text-main)',
+                    letterSpacing: '-0.01em',
+                  }}
+                >
+                  Fleet Maintenance Scheduling & Work Orders
+                </h2>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Deterministic priority optimization under bay capacity limits, technician work orders, and audit trail.
+                </p>
+              </div>
+            </div>
+
+            {/* Fleet Maintenance Scheduling Card */}
+            <FleetSchedulerCard
+              scheduleData={fleetSchedule}
+              onUpdateCapacity={handleUpdateScheduleCapacity}
+              onCreateWorkOrder={(item) => {
+                setWorkOrderPreFill({
+                  engine_id: item.engine_id,
+                  priority: item.priority,
+                  predicted_rul: item.predicted_rul,
+                  scheduled_cycle_target: item.scheduled_cycle_target,
+                  recommendation: `Priority ${item.priority} overhaul for Unit #${item.engine_id}. RUL: ${item.predicted_rul.toFixed(1)} cycles.`,
+                });
+              }}
+              isLoading={isScheduleLoading}
+            />
+
+            {/* Maintenance Work Orders CRUD View */}
+            <MaintenanceRecordsView
+              initialWorkOrderData={workOrderPreFill}
+              onClearInitial={() => setWorkOrderPreFill(null)}
+            />
+          </div>
+        )}
+
+        {/* TAB 5: PREDICTION HISTORY */}
         {activeTab === 'history' && (
           <div>
             <div style={{ marginBottom: '20px' }}>

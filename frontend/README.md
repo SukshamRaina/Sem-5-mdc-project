@@ -1,6 +1,6 @@
-# NASA C-MAPSS Predictive Maintenance — React Dashboard (Phase 3)
+# NASA C-MAPSS Predictive Maintenance — React Dashboard (Phase 3 & Phase 4)
 
-Academic decision-support dashboard for Turbofan Engine Remaining Useful Life (RUL) estimation using Deep Learning (Stacked LSTM) based on the NASA Ames Prognostics Data Repository (C-MAPSS FD001).
+Academic decision-support dashboard for Turbofan Engine Remaining Useful Life (RUL) estimation using Deep Learning (Stacked LSTM), gradient-based sensor explainability, and capacity-constrained fleet maintenance optimization based on the NASA Ames Prognostics Data Repository (C-MAPSS FD001).
 
 ---
 
@@ -8,10 +8,12 @@ Academic decision-support dashboard for Turbofan Engine Remaining Useful Life (R
 
 - **Frontend**: React 19 + Vite 8
 - **Styling**: Vanilla CSS (Strict light-mode industrial analytics design system)
-- **Visualizations**: Recharts for dynamic cycle-by-cycle degradation trajectories and physical sensor observations
-- **Backend Service**: Python 3.13 + FastAPI + Pydantic
+- **Visualizations**: Recharts for dynamic cycle-by-cycle degradation trajectories, physical sensor observations, and gradient-based feature attribution
+- **Backend Service**: Python 3.13 + FastAPI + Pydantic v2
 - **ML Engine**: Keras Stacked LSTM (64 -> 32 -> Dense) trained on 20,631 run-to-failure cycles
-- **Database**: Supabase PostgreSQL with in-memory resilient fallback
+- **Explainability**: Exact Gradient-Based Input Sensitivity ($\nabla_X \hat{y}$ via `tf.GradientTape`) + Linear Sensor Degradation Drift Slopes
+- **Optimization**: Deterministic Multi-Criteria Fleet Prioritization with configurable hangar bay capacities and service lead times
+- **Database**: Supabase PostgreSQL with in-memory resilient fallback and work orders audit trail
 
 ---
 
@@ -24,8 +26,7 @@ Ensure **Node.js (>= 18)** and **Python (>= 3.10)** are installed.
 From the repository root directory:
 
 ```bash
-# Activate virtual environment if configured
-# Run FastAPI server on port 8000
+# Start FastAPI backend service on port 8000
 uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
@@ -64,26 +65,42 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173) in your web browser.
 
 ---
 
-## 3. Telemetry Ingestion & Prediction Workflow
+## 3. Dashboard Features & Capabilities
 
-1. **Select Telemetry File**:
-   - Drag and drop or browse for a `.csv` or space-separated NASA C-MAPSS `.txt` file.
-   - Alternatively, use one of the pre-validated test buttons (`sample_engine_1.csv`, `sample_multi_engine.csv`, `sample_engine_near_failure.csv`).
-2. **Execute Inference**:
-   - Click **Execute RUL Prediction** to submit the file to `POST /predict`.
-   - The backend validates sensor columns, scales inputs using the fitted training scaler with zero data leakage, and runs LSTM inference.
-3. **Analyze Results**:
-   - Inspect predicted Remaining Useful Life (RUL) in operational flight cycles.
-   - Review the deterministic risk tier (`HEALTHY`, `MODERATE`, `WARNING`, `CRITICAL`) and engineering maintenance advisory.
-   - Explore the degradation trajectory curve and individual sensor readings across flight cycles.
-4. **Inspect Prediction History**:
-   - Navigate to the **Prediction History** tab to view persistent logs stored in Supabase with pagination and filtering by Engine ID and Risk Tier.
+### 1. Fleet Overview
+- High-level health telemetry for active engine batches and overall database activity.
+- Visual breakdown of fleet risk levels: `CRITICAL` (&le; 25 cycles), `WARNING` (25–50 cycles), `MODERATE` (50–80 cycles), and `HEALTHY` (> 80 cycles).
+
+### 2. Telemetry & Prediction
+- Ingest raw NASA C-MAPSS 26-column space-separated data or standard CSV with headers.
+- Interactive drag-and-drop file upload with pre-validated sample datasets for quick evaluation.
+
+### 3. Results & Sensor Analytics (Phase 4 Enhanced)
+- **Transparent Decision Separation**: Clearly delineates the **LSTM statistical RUL prediction** from **rule-based decision-support policies**.
+- **Actionable Maintenance Recommendations**: Priority tiers (`P1_IMMEDIATE`, `P2_URGENT`, `P3_ROUTINE`, `P4_DEFERRED`), technical justification, and mandatory `Human Review Required` flag.
+- **Explainability & Feature Attribution**:
+  - Exact gradient sensitivity bar chart showing relative influence of each sensor channel (sums to 100%).
+  - Top 5 primary degradation drivers mapped to turbofan subsystems (HPC, HPT, LPT, Bypass Duct).
+  - Diagnostic drift table displaying per-cycle slopes and Z-score standard deviations.
+  - Collapsible architectural rationale explaining why `tf.GradientTape` was chosen over KernelSHAP for recurrent sequence networks.
+
+### 4. Maintenance & Scheduling (Phase 4)
+- **Capacity-Constrained Optimization**: Prioritizes engines deterministically:
+  1. Priority Tier (P1 > P2 > P3 > P4)
+  2. Lowest Predicted RUL (ascending)
+  3. Highest Accumulated Flight Cycles (descending)
+  4. Unit ID (ascending tie-breaker)
+- **Hangar Bay Capacity & Lead Time Controls**: Configurable concurrent bays (default: 2) and parts staging buffer (default: 5 cycles), with automatic bottleneck detection warnings.
+- **Work Orders & Service Records**: Full CRUD operations for technician dispatch, target cycle deadlines, status lifecycle (`PENDING` &rarr; `IN_PROGRESS` &rarr; `COMPLETED`), and engineering notes.
+
+### 5. Prediction History
+- Paginated search and inspection of historical inference runs stored in Supabase with metadata viewing.
 
 ---
 
 ## 4. Running Automated Tests & Production Build
 
-### Run Frontend Unit Tests
+### Run Frontend Unit & Integration Tests (32 Tests)
 ```bash
 npm test
 ```
@@ -97,4 +114,4 @@ npm run lint
 ```bash
 npm run build
 ```
-The compiled output will be generated in `frontend/dist/`.
+The compiled, optimized production bundle will be generated in `frontend/dist/`.

@@ -19,6 +19,7 @@ class PredictionRepository:
 
     def __init__(self):
         self._memory_store: List[Dict[str, Any]] = []
+        self._maintenance_store: List[Dict[str, Any]] = []
         self._lock = Lock()
 
     def save_predictions(self, records: List[Dict[str, Any]]) -> List[str]:
@@ -128,10 +129,96 @@ class PredictionRepository:
                     return r
         return None
 
+    def create_maintenance_record(self, record: Dict[str, Any]) -> str:
+        """Persists a new maintenance work order record to Supabase or in-memory fallback."""
+        item = dict(record)
+        if "id" not in item or not item["id"]:
+            item["id"] = str(uuid.uuid4())
+        if "created_at" not in item or not item["created_at"]:
+            item["created_at"] = datetime.now(timezone.utc).isoformat()
+        if "status" not in item:
+            item["status"] = "PENDING"
+
+        client = get_supabase_client()
+        if client is not None:
+            try:
+                response = client.table("maintenance_records").insert(item).execute()
+                if response.data:
+                    return response.data[0]["id"]
+            except Exception as exc:
+                logger.warning("Supabase maintenance_records insert failed (%s). Falling back.", str(exc))
+
+        with self._lock:
+            self._maintenance_store.insert(0, item)
+        return item["id"]
+
+    def get_maintenance_records(
+        self,
+        engine_id: Optional[int] = None,
+        status: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Retrieves maintenance records filtered by engine_id and/or status."""
+        client = get_supabase_client()
+        if client is not None:
+            try:
+                query = client.table("maintenance_records").select("*")
+                if engine_id is not None:
+                    query = query.eq("engine_id", engine_id)
+                if status is not None:
+                    query = query.eq("status", status.upper())
+                response = query.order("created_at", desc=True).execute()
+                return response.data or []
+            except Exception as exc:
+                logger.warning("Supabase maintenance_records query failed (%s). Reading from memory.", str(exc))
+
+        with self._lock:
+            filtered = list(self._maintenance_store)
+            if engine_id is not None:
+                filtered = [r for r in filtered if r.get("engine_id") == engine_id]
+            if status is not None:
+                filtered = [r for r in filtered if r.get("status", "").upper() == status.upper()]
+            return filtered
+
+    def get_maintenance_record_by_id(self, record_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieves a single maintenance record by UUID identifier."""
+        client = get_supabase_client()
+        if client is not None:
+            try:
+                response = client.table("maintenance_records").select("*").eq("id", record_id).limit(1).execute()
+                if response.data:
+                    return response.data[0]
+            except Exception as exc:
+                logger.warning("Supabase maintenance_record get failed (%s). Checking memory.", str(exc))
+
+        with self._lock:
+            for r in self._maintenance_store:
+                if str(r.get("id")) == str(record_id):
+                    return r
+        return None
+
+    def update_maintenance_record(self, record_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Updates fields (e.g. status, notes, action_taken) of a maintenance record."""
+        client = get_supabase_client()
+        if client is not None:
+            try:
+                response = client.table("maintenance_records").update(updates).eq("id", record_id).execute()
+                if response.data:
+                    return response.data[0]
+            except Exception as exc:
+                logger.warning("Supabase maintenance_records update failed (%s). Updating in memory.", str(exc))
+
+        with self._lock:
+            for r in self._maintenance_store:
+                if str(r.get("id")) == str(record_id):
+                    r.update(updates)
+                    return dict(r)
+        return None
+
     def clear_in_memory(self) -> None:
         """Utility for test suite cleanup."""
         with self._lock:
             self._memory_store.clear()
+            self._maintenance_store.clear()
 
 
 # Global repository instance

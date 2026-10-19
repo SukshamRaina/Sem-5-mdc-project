@@ -30,6 +30,10 @@ class EnginePrediction(BaseModel):
         default=None, description="Cycle-by-cycle historical RUL degradation curve"
     )
     database_id: Optional[str] = Field(default=None, description="Supabase UUID record identifier")
+    priority: Optional[str] = Field(default="P4_DEFERRED", description="Assigned maintenance priority tier")
+    risk_assessment: Optional[Dict[str, Any]] = Field(default=None, description="Configurable risk evaluation and prototype disclosures")
+    maintenance_recommendation: Optional[Dict[str, Any]] = Field(default=None, description="Actionable advisory with reason and review flag")
+    explanation: Optional[Dict[str, Any]] = Field(default=None, description="Gradient-based feature attribution and sensor trend analysis")
 
 
 class FleetSummary(BaseModel):
@@ -56,6 +60,7 @@ class PredictionResponse(BaseModel):
     features_used: List[str] = Field(..., description="List of sensor features used in model input")
     timestamp: str = Field(..., description="Inference completion timestamp")
     database_status: str = Field(..., description="Status of database storage ('saved_to_supabase' or 'saved_in_memory')")
+    fleet_schedule: Optional[Dict[str, Any]] = Field(default=None, description="Automated prioritized fleet maintenance schedule")
 
 
 class RawCsvRequest(BaseModel):

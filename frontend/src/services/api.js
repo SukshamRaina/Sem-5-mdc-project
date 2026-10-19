@@ -287,4 +287,127 @@ export async function getPredictionById(predictionId) {
   }
 }
 
+/**
+ * Fetch optimized fleet maintenance schedule (POST /maintenance/schedule).
+ */
+export async function getFleetSchedule({
+  hangarCapacity = 2,
+  leadTimeCycles = 5,
+  engines = null,
+} = {}) {
+  try {
+    const endpoint = API_BASE_URL ? `${API_BASE_URL}/maintenance/schedule` : '/maintenance/schedule';
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        hangar_capacity: Number(hangarCapacity),
+        lead_time_cycles: Number(leadTimeCycles),
+        engines: engines,
+      }),
+    });
+
+    if (!response.ok) {
+      throw await parseErrorResponse(response);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(`Failed to compute fleet schedule: ${error.message}`, 0, error);
+  }
+}
+
+/**
+ * Fetch maintenance work orders from database (GET /maintenance/records).
+ */
+export async function getMaintenanceRecords({ engineId = null, status = null } = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (engineId !== null && engineId !== undefined && engineId !== '') {
+      params.set('engine_id', String(engineId));
+    }
+    if (status && status !== 'ALL') {
+      params.set('status', String(status).toUpperCase());
+    }
+
+    const endpoint = API_BASE_URL ? `${API_BASE_URL}/maintenance/records` : '/maintenance/records';
+    const url = params.toString() ? `${endpoint}?${params.toString()}` : endpoint;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw await parseErrorResponse(response);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(`Failed to fetch maintenance records: ${error.message}`, 0, error);
+  }
+}
+
+/**
+ * Create a new maintenance work order (POST /maintenance/records).
+ */
+export async function createMaintenanceRecord(recordData) {
+  try {
+    const endpoint = API_BASE_URL ? `${API_BASE_URL}/maintenance/records` : '/maintenance/records';
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(recordData),
+    });
+
+    if (!response.ok) {
+      throw await parseErrorResponse(response);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(`Failed to create maintenance record: ${error.message}`, 0, error);
+  }
+}
+
+/**
+ * Update an existing maintenance record status/notes (PATCH /maintenance/records/{record_id}).
+ */
+export async function updateMaintenanceRecord(recordId, updateData) {
+  try {
+    const endpoint = API_BASE_URL
+      ? `${API_BASE_URL}/maintenance/records/${encodeURIComponent(recordId)}`
+      : `/maintenance/records/${encodeURIComponent(recordId)}`;
+
+    const response = await fetch(endpoint, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(updateData),
+    });
+
+    if (!response.ok) {
+      throw await parseErrorResponse(response);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(`Failed to update maintenance record: ${error.message}`, 0, error);
+  }
+}
+
 export { ApiError };
