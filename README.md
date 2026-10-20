@@ -16,19 +16,19 @@ Academic Decision-Support Prototype for Turbofan Engine Remaining Useful Life (R
 
 ```mermaid
 graph TD
-    subgraph Data & Feature Pipeline
+    subgraph pipeline ["Data & Feature Pipeline"]
         A["NASA C-MAPSS FD001 Sensor Telemetry"] --> B["CSV / Space-Separated Parser & Validator"]
         B --> C["CMapssPreprocessor (14 Informative Sensors, Zero Leakage)"]
         C --> D["Sliding Window Sequence Generator (W=30 Cycles)"]
     end
 
-    subgraph Deep Learning Inference
+    subgraph inference ["Deep Learning Inference"]
         D --> E["Stacked LSTM Regressor (64 -> 32 -> Dense)"]
         E --> F["Remaining Useful Life (RUL) Prediction"]
         E --> G["Cycle-by-Cycle RUL Trajectory"]
     end
 
-    subgraph Phase 4: Risk, Explainability & Scheduling
+    subgraph decision ["Phase 4: Risk, Explainability & Scheduling"]
         F --> H["Configurable Risk Categorization (Prototype Rules)"]
         H --> I["Actionable Priority Recommendations (P1-P4 + Human Review Flag)"]
         D & E --> J["tf.GradientTape Input Sensitivity Attribution"]
@@ -37,7 +37,7 @@ graph TD
         I & F --> M["Deterministic Multi-Criteria Fleet Scheduler"]
     end
 
-    subgraph Storage & Presentation
+    subgraph presentation ["Storage & Presentation"]
         H & I & L & M --> N["FastAPI REST Endpoints (/predict, /maintenance)"]
         N --> O["Supabase PostgreSQL (or Resilient Memory Store)"]
         N --> P["React 19 Light-Mode Industrial Dashboard"]
