@@ -1,7 +1,7 @@
 """
 Prediction Endpoints for NASA C-MAPSS Engine Degradation Inference.
 Provides:
-- POST /predict: Multipart CSV file upload with real LSTM inference.
+- POST /predict: Multipart CSV file upload with real PINN inference and dataset selection.
 - POST /predict/raw: Direct CSV string payload for programmatic testing.
 - GET /predictions: Paginated prediction history from Supabase / fallback.
 - GET /predictions/{prediction_id}: Specific prediction record retrieval.
@@ -15,6 +15,7 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 from backend.app.api.health import get_predictor_instance
 from backend.app.core.config import settings
 from backend.app.db.repository import prediction_repo
+from backend.app.ml.preprocessor import DATASET_DEFAULT_FEATURES
 from backend.app.ml.validator import parse_and_validate_csv
 from backend.app.schemas.prediction import (
     CyclePrediction,
@@ -33,30 +34,55 @@ router = APIRouter(tags=["Predictions"])
 def _run_inference_on_engines(
     engines_data: Dict[int, Any],
     include_trajectory: bool = True,
+    dataset: str = "FD001",
 ) -> PredictionResponse:
-    """Core pipeline executing ML inference, risk classification, and database persistence."""
+    """Core pipeline executing PINN inference, risk classification, and database persistence."""
     predictor = get_predictor_instance()
-    if predictor is None or not predictor._is_loaded:
+    if predictor is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Machine learning model is not yet loaded in memory.",
+            detail="Machine learning predictor is not initialized in memory.",
+        )
+
+    dataset = dataset.upper()
+    if dataset not in settings.SUPPORTED_DATASETS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unsupported dataset '{dataset}'. Must be one of {settings.SUPPORTED_DATASETS}.",
+        )
+
+    # Ensure dataset PINN model is loaded
+    try:
+        model, preprocessor, explainer, feature_cols = predictor.get_or_load(dataset)
+    except FileNotFoundError as fnf_err:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(fnf_err),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load PINN model for dataset '{dataset}': {str(exc)}",
         )
 
     predictions_list: List[EnginePrediction] = []
     db_records_to_insert: List[Dict[str, Any]] = []
+    model_version = f"pinn-{dataset.lower()}-v1.0"
 
     for engine_id, engine_df in engines_data.items():
-        # Real LSTM model inference (Rule 9: never mock in place of real ML)
-        pred_dict = predictor.predict_engine(engine_df)
+        # Real PINN model inference (Rule 9: never mock in place of real ML)
+        pred_dict = predictor.predict_engine(engine_df, dataset=dataset)
 
         trajectory_points: Optional[List[CyclePrediction]] = None
         if include_trajectory:
-            traj_data = predictor.predict_trajectory(engine_df)
+            traj_data = predictor.predict_trajectory(engine_df, dataset=dataset)
             trajectory_points = [
                 CyclePrediction(
                     cycle=item["cycle"],
                     predicted_rul=item["predicted_rul"],
                     risk_level=item["risk_level"],
+                    latent_degradation_state=item.get("latent_degradation_state"),
+                    estimated_degradation_rate=item.get("estimated_degradation_rate"),
                 )
                 for item in traj_data
             ]
@@ -75,6 +101,10 @@ def _run_inference_on_engines(
             risk_assessment=pred_dict.get("risk_assessment"),
             maintenance_recommendation=pred_dict.get("maintenance_recommendation"),
             explanation=pred_dict.get("explanation"),
+            dataset=dataset,
+            model_type="PINN",
+            latent_degradation_state=pred_dict.get("latent_degradation_state"),
+            estimated_degradation_rate=pred_dict.get("estimated_degradation_rate"),
         )
         predictions_list.append(engine_pred)
 
@@ -88,9 +118,13 @@ def _run_inference_on_engines(
                 "risk_level": pred_dict["risk_level"],
                 "risk_color": pred_dict["risk_color"],
                 "recommendation": pred_dict["recommendation"],
-                "model_version": settings.MODEL_VERSION,
+                "model_version": model_version,
                 "features_used": pred_dict["features_used"],
                 "input_metadata": {
+                    "dataset": dataset,
+                    "model_type": "PINN",
+                    "latent_degradation_state": pred_dict.get("latent_degradation_state"),
+                    "estimated_degradation_rate": pred_dict.get("estimated_degradation_rate"),
                     "padded_sequence": pred_dict["padded_sequence"],
                     "sequence_length": pred_dict["sequence_length_used"],
                     "priority": pred_dict.get("priority"),
@@ -152,11 +186,13 @@ def _run_inference_on_engines(
 
     return PredictionResponse(
         success=True,
-        message=f"Successfully generated RUL predictions for {total_engines} engine(s).",
+        message=f"Successfully generated PINN RUL predictions for {total_engines} engine(s) on [{dataset}].",
         fleet_summary=summary,
         predictions=predictions_list,
-        model_version=settings.MODEL_VERSION,
-        features_used=predictor.feature_columns,
+        model_version=model_version,
+        model_type="PINN",
+        dataset=dataset,
+        features_used=feature_cols,
         timestamp=datetime.now(timezone.utc).isoformat(),
         database_status=db_status,
         fleet_schedule=fleet_schedule,
@@ -169,16 +205,25 @@ def _run_inference_on_engines(
     summary="Upload CSV and predict engine Remaining Useful Life (RUL)",
     description=(
         "Accepts a CSV containing turbofan engine sensor data. "
-        "Validates required sensor columns and cycle continuity, "
-        "executes real LSTM inference, and persists results to the database."
+        "Supports dataset selection (FD001, FD002, FD003, FD004), "
+        "executes real Physics-Informed Neural Network (PINN) inference, "
+        "and persists results to the database."
     ),
 )
 async def predict_from_csv(
     file: UploadFile = File(..., description="CSV file containing engine cycle readings"),
+    dataset: str = Query("FD001", description="Target C-MAPSS dataset subset (FD001, FD002, FD003, FD004)"),
     include_trajectory: bool = Query(True, description="Whether to include historical cycle trajectory"),
 ) -> PredictionResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename cannot be empty.")
+
+    ds = dataset.upper()
+    if ds not in settings.SUPPORTED_DATASETS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unknown dataset '{dataset}'. Supported datasets: {settings.SUPPORTED_DATASETS}",
+        )
 
     try:
         content = await file.read()
@@ -193,7 +238,13 @@ async def predict_from_csv(
         )
 
     predictor = get_predictor_instance()
-    required_features = predictor.feature_columns if predictor else None
+    try:
+        if predictor and ds in predictor._features:
+            required_features = predictor._features[ds]
+        else:
+            required_features = DATASET_DEFAULT_FEATURES.get(ds, DATASET_DEFAULT_FEATURES["FD001"])
+    except Exception:
+        required_features = DATASET_DEFAULT_FEATURES.get(ds, DATASET_DEFAULT_FEATURES["FD001"])
 
     try:
         engines_data = parse_and_validate_csv(
@@ -207,18 +258,31 @@ async def predict_from_csv(
             detail=str(val_err),
         )
 
-    return _run_inference_on_engines(engines_data, include_trajectory=include_trajectory)
+    return _run_inference_on_engines(engines_data, include_trajectory=include_trajectory, dataset=ds)
 
 
 @router.post(
     "/predict/raw",
     response_model=PredictionResponse,
     summary="Predict RUL from raw CSV text payload",
-    description="Accepts raw CSV string body. Suitable for programmatic testing and curl requests.",
+    description="Accepts raw CSV string body and dataset selection. Suitable for programmatic testing and curl requests.",
 )
 async def predict_from_raw_csv(payload: RawCsvRequest) -> PredictionResponse:
+    ds = (payload.dataset or "FD001").upper()
+    if ds not in settings.SUPPORTED_DATASETS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unknown dataset '{payload.dataset}'. Supported datasets: {settings.SUPPORTED_DATASETS}",
+        )
+
     predictor = get_predictor_instance()
-    required_features = predictor.feature_columns if predictor else None
+    try:
+        if predictor and ds in predictor._features:
+            required_features = predictor._features[ds]
+        else:
+            required_features = DATASET_DEFAULT_FEATURES.get(ds, DATASET_DEFAULT_FEATURES["FD001"])
+    except Exception:
+        required_features = DATASET_DEFAULT_FEATURES.get(ds, DATASET_DEFAULT_FEATURES["FD001"])
 
     try:
         engines_data = parse_and_validate_csv(payload.csv_data, required_features=required_features)
@@ -228,7 +292,7 @@ async def predict_from_raw_csv(payload: RawCsvRequest) -> PredictionResponse:
             detail=str(val_err),
         )
 
-    return _run_inference_on_engines(engines_data, include_trajectory=payload.include_trajectory)
+    return _run_inference_on_engines(engines_data, include_trajectory=payload.include_trajectory, dataset=ds)
 
 
 @router.get(

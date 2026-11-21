@@ -39,7 +39,7 @@ export default function SystemHealthCard({ health }) {
             }}
           >
             <Cpu size={15} />
-            <span>LSTM MODEL ENGINE</span>
+            <span>PINN PROGNOSTICS ENGINE</span>
           </div>
           <div
             style={{
@@ -49,10 +49,10 @@ export default function SystemHealthCard({ health }) {
               marginTop: '6px',
             }}
           >
-            {health?.model_loaded ? 'Resident In Memory' : 'Not Loaded'}
+            {health?.model_loaded ? 'Physics-Informed Resident' : 'Not Loaded'}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            Version: {health?.model_version || 'N/A'}
+            Model: {health?.model_type || 'PINN'} &bull; {health?.model_version || 'v1.0'}
           </div>
         </div>
 

@@ -1,0 +1,9 @@
+{
+  "lambda_physics": 0.1,
+  "lambda_monotonicity": 0.1,
+  "lambda_boundary": 0.05,
+  "max_rul_clip": 125.0,
+  "time_scale": 100.0,
+  "governing_ode": "d(RUL)/dt = -RUL_max * g_theta(X, t)",
+  "monotonicity_constraint": "d(RUL)/dt <= 0"
+}

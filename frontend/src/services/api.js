@@ -94,9 +94,9 @@ export async function getHealth() {
 
 /**
  * Uploads a CSV file to the real POST /predict endpoint.
- * Supports XMLHttpRequest for granular upload progress tracking.
+ * Supports dataset selection (FD001-FD004) and XMLHttpRequest for upload progress tracking.
  */
-export function predictFromCsv(file, includeTrajectory = true, onProgress = null) {
+export function predictFromCsv(file, includeTrajectory = true, onProgress = null, dataset = 'FD001') {
   return new Promise((resolve, reject) => {
     // Client-side file type and size validation
     if (!file) {
@@ -133,7 +133,7 @@ export function predictFromCsv(file, includeTrajectory = true, onProgress = null
 
     const xhr = new XMLHttpRequest();
     const endpoint = API_BASE_URL ? `${API_BASE_URL}/predict` : '/predict';
-    const url = `${endpoint}?include_trajectory=${encodeURIComponent(includeTrajectory)}`;
+    const url = `${endpoint}?include_trajectory=${encodeURIComponent(includeTrajectory)}&dataset=${encodeURIComponent(dataset || 'FD001')}`;
 
     xhr.open('POST', url);
     xhr.setRequestHeader('Accept', 'application/json');
@@ -194,7 +194,7 @@ export function predictFromCsv(file, includeTrajectory = true, onProgress = null
 /**
  * Predict RUL from raw CSV text payload (POST /predict/raw).
  */
-export async function predictFromRawCsv(csvData, includeTrajectory = true) {
+export async function predictFromRawCsv(csvData, includeTrajectory = true, dataset = 'FD001') {
   try {
     const targetUrl = API_BASE_URL ? `${API_BASE_URL}/predict/raw` : '/predict/raw';
     const response = await fetch(targetUrl, {
@@ -206,6 +206,7 @@ export async function predictFromRawCsv(csvData, includeTrajectory = true) {
       body: JSON.stringify({
         csv_data: csvData,
         include_trajectory: includeTrajectory,
+        dataset: dataset,
       }),
     });
 

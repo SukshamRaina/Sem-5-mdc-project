@@ -1,5 +1,6 @@
 """
 Pydantic schemas for RUL prediction requests, responses, and database records.
+Updated to support Physics-Informed Neural Network (PINN) metadata and dataset selection.
 """
 
 from datetime import datetime
@@ -13,6 +14,8 @@ class CyclePrediction(BaseModel):
     cycle: int = Field(..., description="Operational flight cycle number")
     predicted_rul: float = Field(..., description="Estimated remaining operational cycles")
     risk_level: str = Field(..., description="Risk tier: CRITICAL, WARNING, MODERATE, HEALTHY")
+    latent_degradation_state: Optional[float] = Field(None, description="Normalized physical damage state D(t) in [0, 1]")
+    estimated_degradation_rate: Optional[float] = Field(None, description="Instantaneous degradation rate from PINN physics head")
 
 
 class EnginePrediction(BaseModel):
@@ -34,6 +37,10 @@ class EnginePrediction(BaseModel):
     risk_assessment: Optional[Dict[str, Any]] = Field(default=None, description="Configurable risk evaluation and prototype disclosures")
     maintenance_recommendation: Optional[Dict[str, Any]] = Field(default=None, description="Actionable advisory with reason and review flag")
     explanation: Optional[Dict[str, Any]] = Field(default=None, description="Gradient-based feature attribution and sensor trend analysis")
+    dataset: Optional[str] = Field(default="FD001", description="C-MAPSS dataset subset (FD001, FD002, FD003, FD004)")
+    model_type: Optional[str] = Field(default="PINN", description="Model architecture type (PINN)")
+    latent_degradation_state: Optional[float] = Field(None, description="Latent degradation state D(t) in [0, 1]")
+    estimated_degradation_rate: Optional[float] = Field(None, description="Instantaneous degradation rate g_theta")
 
 
 class FleetSummary(BaseModel):
@@ -57,6 +64,8 @@ class PredictionResponse(BaseModel):
     fleet_summary: FleetSummary = Field(..., description="Fleet-level summary statistics")
     predictions: List[EnginePrediction] = Field(..., description="Per-engine prediction list")
     model_version: str = Field(..., description="Model version used for inference")
+    model_type: str = Field("PINN", description="Architecture type: PINN")
+    dataset: str = Field("FD001", description="C-MAPSS dataset subset used for inference")
     features_used: List[str] = Field(..., description="List of sensor features used in model input")
     timestamp: str = Field(..., description="Inference completion timestamp")
     database_status: str = Field(..., description="Status of database storage ('saved_to_supabase' or 'saved_in_memory')")
@@ -67,6 +76,7 @@ class RawCsvRequest(BaseModel):
     """Direct CSV text payload for API/CLI testing."""
 
     csv_data: str = Field(..., description="Raw CSV string content including headers")
+    dataset: Optional[str] = Field("FD001", description="Target C-MAPSS dataset subset (FD001, FD002, FD003, FD004)")
     include_trajectory: bool = Field(True, description="Whether to compute cycle-by-cycle trajectory")
 
 

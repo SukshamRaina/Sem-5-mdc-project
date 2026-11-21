@@ -31,6 +31,10 @@ export default function EngineRulCard({ prediction }) {
     priority,
     risk_assessment,
     maintenance_recommendation,
+    latent_degradation_state,
+    estimated_degradation_rate,
+    model_type = 'PINN',
+    dataset = 'FD001',
   } = prediction;
 
   const riskInfo = getRiskInfo(risk_level);
@@ -202,16 +206,16 @@ export default function EngineRulCard({ prediction }) {
             >
               <Info size={12} />
               <span>
-                Model statistical estimate &bull; NASA C-MAPSS FD001 Trained Stacked LSTM
+                PINN Prognostics Engine &bull; NASA C-MAPSS {dataset} Trained Physics-Informed Model
               </span>
             </p>
           </div>
 
-          {/* Operational Cycle Telemetry Metrics */}
+          {/* Operational Cycle Telemetry & PINN Degradation Metrics */}
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
+              gridTemplateColumns: latent_degradation_state !== undefined && latent_degradation_state !== null ? '1fr 1fr 1fr 1fr' : '1fr 1fr',
               gap: '12px',
               padding: '16px',
               backgroundColor: 'var(--bg-canvas)',
@@ -270,6 +274,62 @@ export default function EngineRulCard({ prediction }) {
                 Processed observations
               </div>
             </div>
+
+            {latent_degradation_state !== undefined && latent_degradation_state !== null && (
+              <>
+                <div>
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: 'var(--text-secondary)',
+                      textTransform: 'uppercase',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Latent Damage D(t)
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '20px',
+                      fontWeight: 700,
+                      color: 'var(--warning-text)',
+                      marginTop: '2px',
+                    }}
+                  >
+                    {(latent_degradation_state * 100).toFixed(1)}%
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    Normalized [0.0, 1.0]
+                  </div>
+                </div>
+
+                <div>
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: 'var(--text-secondary)',
+                      textTransform: 'uppercase',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Degradation Rate
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '20px',
+                      fontWeight: 700,
+                      color: 'var(--critical-text)',
+                      marginTop: '2px',
+                    }}
+                  >
+                    {estimated_degradation_rate !== undefined && estimated_degradation_rate !== null ? estimated_degradation_rate.toFixed(4) : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    dD/dt (ODE head)
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

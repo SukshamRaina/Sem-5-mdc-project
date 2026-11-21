@@ -1,0 +1,36 @@
+{
+  "dataset": "FD002",
+  "model_architecture": "PINN (Dual-Head Conv1D-GRU Regression)",
+  "model_version": "pinn-fd002-v1.0",
+  "num_test_engines": 259,
+  "sequence_length": 30,
+  "feature_count": 18,
+  "selected_features": [
+    "setting_1",
+    "setting_2",
+    "setting_3",
+    "sensor_2",
+    "sensor_3",
+    "sensor_4",
+    "sensor_6",
+    "sensor_7",
+    "sensor_8",
+    "sensor_9",
+    "sensor_11",
+    "sensor_12",
+    "sensor_13",
+    "sensor_14",
+    "sensor_15",
+    "sensor_17",
+    "sensor_20",
+    "sensor_21"
+  ],
+  "metrics": {
+    "mae": 16.983,
+    "rmse": 25.854,
+    "r2_score": 0.7689,
+    "nasa_score": 6559.4
+  },
+  "avg_degradation_rate": 0.0537,
+  "legacy_comparison": null
+}

@@ -1,6 +1,6 @@
 """
 Main FastAPI Application Entry Point for NASA C-MAPSS Predictive Maintenance.
-Initializes application lifecycle, loads trained ML artifacts into memory,
+Initializes application lifecycle, loads trained PINN ML artifacts into memory,
 configures CORS middleware, and mounts API route endpoints.
 """
 
@@ -27,23 +27,33 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Application lifespan manager.
-    Pre-loads the trained LSTM model and scaler on startup to eliminate cold starts.
+    Pre-loads the trained PINN model and scaler on startup to eliminate cold starts.
     """
-    logger.info("Initializing NASA C-MAPSS Predictive Maintenance Backend...")
+    logger.info("Initializing NASA C-MAPSS Predictive Maintenance Backend (PINN Architecture)...")
 
-    # 1. Initialize ML Predictor
+    # 1. Initialize PINN Predictor
     try:
-        predictor = CMapssPredictor(artifacts_dir=settings.ARTIFACTS_DIR)
-        predictor.load()
-        set_predictor_instance(predictor)
-        logger.info(
-            "ML Engine ready: LSTM model & Scaler resident in memory (%d features).",
-            len(predictor.feature_columns),
+        predictor = CMapssPredictor(
+            artifacts_dir=settings.PINN_ARTIFACTS_DIR,
+            default_dataset=settings.DEFAULT_DATASET,
         )
+        try:
+            predictor.load(settings.DEFAULT_DATASET)
+            logger.info(
+                "PINN Engine ready: [%s] model & Scaler resident in memory (%d features).",
+                settings.DEFAULT_DATASET,
+                len(predictor.feature_columns),
+            )
+        except Exception as load_err:
+            logger.warning(
+                "PINN model for [%s] could not be pre-loaded: %s. Models will load on demand.",
+                settings.DEFAULT_DATASET,
+                str(load_err),
+            )
+        set_predictor_instance(predictor)
     except Exception as exc:
         logger.critical(
-            "STARTUP FAILURE — ML artifacts could not be loaded: %s. "
-            "All /predict calls will be rejected with HTTP 503 until artifacts are restored.",
+            "STARTUP FAILURE — Predictor initialization error: %s",
             str(exc),
             exc_info=True,
         )
@@ -67,7 +77,7 @@ app = FastAPI(
     version=settings.VERSION,
     description=(
         "Academic decision-support backend for Turbofan Engine Remaining Useful Life (RUL) "
-        "estimation based on NASA C-MAPSS FD001 sensor telemetry and LSTM deep learning."
+        "estimation based on NASA C-MAPSS sensor telemetry and Physics-Informed Neural Networks (PINN)."
     ),
     docs_url="/docs",
     redoc_url="/redoc",
@@ -75,9 +85,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS — explicit development origins only.
-# Never allow the wildcard origin alongside allow_credentials=True,
-# as browsers reject credentialed cross-origin requests with origin=*.
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,

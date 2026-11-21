@@ -1,0 +1,22 @@
+{
+  "dataset": "FD001",
+  "selected_features": [
+    "sensor_2",
+    "sensor_3",
+    "sensor_4",
+    "sensor_7",
+    "sensor_8",
+    "sensor_9",
+    "sensor_11",
+    "sensor_12",
+    "sensor_13",
+    "sensor_14",
+    "sensor_15",
+    "sensor_17",
+    "sensor_20",
+    "sensor_21"
+  ],
+  "feature_count": 14,
+  "use_condition_normalization": false,
+  "max_rul_clip": 125.0
+}

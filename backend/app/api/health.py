@@ -28,8 +28,8 @@ def get_predictor_instance() -> CMapssPredictor | None:
 @router.get(
     "/health",
     response_model=HealthResponse,
-    summary="Health check and ML model readiness",
-    description="Reports the operational status of the API, ML model in-memory state, and Supabase connectivity.",
+    summary="Health check and PINN model readiness",
+    description="Reports the operational status of the API, PINN model in-memory state, and database connectivity.",
 )
 async def check_health() -> HealthResponse:
     global _predictor
@@ -37,8 +37,10 @@ async def check_health() -> HealthResponse:
     scaler_loaded = _predictor is not None and _predictor.preprocessor is not None
     db_connected = is_supabase_connected()
 
+    active_ds = _predictor.active_dataset if _predictor else settings.DEFAULT_DATASET
     features_count = len(_predictor.feature_columns) if _predictor else 14
     seq_len = _predictor.sequence_length if _predictor else 30
+    model_version = f"pinn-{active_ds.lower()}-v1.0" if model_loaded else settings.MODEL_VERSION
 
     status = "healthy" if model_loaded and scaler_loaded else "degraded"
     db_type = "supabase" if db_connected else "in-memory-fallback"
@@ -47,7 +49,10 @@ async def check_health() -> HealthResponse:
         status=status,
         model_loaded=model_loaded,
         scaler_loaded=scaler_loaded,
-        model_version=settings.MODEL_VERSION,
+        model_type="PINN",
+        model_version=model_version,
+        active_dataset=active_ds,
+        supported_datasets=list(settings.SUPPORTED_DATASETS),
         features_count=features_count,
         sequence_length=seq_len,
         database_connected=db_connected,

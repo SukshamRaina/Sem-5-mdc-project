@@ -64,6 +64,7 @@ export default function App() {
   // Upload & File State
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileRowCount, setFileRowCount] = useState(null);
+  const [selectedDataset, setSelectedDataset] = useState('FD001');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState(null);
@@ -185,7 +186,7 @@ export default function App() {
     try {
       const response = await predictFromCsv(selectedFile, true, (progress) => {
         setUploadProgress(progress);
-      });
+      }, selectedDataset);
 
       setPredictionResponse(response);
 
@@ -295,7 +296,7 @@ export default function App() {
                 Turbofan Fleet Status & System Health
               </h2>
               <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Operational dashboard for NASA C-MAPSS FD001 engine degradation analysis.
+                Operational dashboard for NASA C-MAPSS (FD001–FD004) engine degradation analysis with Physics-Informed Neural Networks.
               </p>
             </div>
 
@@ -554,7 +555,7 @@ export default function App() {
                 Telemetry Ingestion & RUL Prediction
               </h2>
               <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Upload flight sensor observations to execute real-time LSTM neural inference.
+                Upload flight sensor observations to execute real-time Physics-Informed Neural Network (PINN) inference.
               </p>
             </div>
 
@@ -583,6 +584,59 @@ export default function App() {
               subtitle="Supports NASA C-MAPSS 26-column space-separated format or standard CSV with headers"
               icon={UploadCloud}
             >
+              {/* Dataset Selection */}
+              <div
+                style={{
+                  marginBottom: '16px',
+                  padding: '12px 16px',
+                  backgroundColor: 'var(--bg-canvas)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-light)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    Target C-MAPSS Fleet Sub-dataset
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    Calibrates physics parameters, condition normalization & model weights
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {[
+                    { id: 'FD001', label: 'FD001', desc: '1 Cond (SL), 1 Fault (HPC)' },
+                    { id: 'FD002', label: 'FD002', desc: '6 Conds, 1 Fault (HPC)' },
+                    { id: 'FD003', label: 'FD003', desc: '1 Cond (SL), 2 Faults (HPC+Fan)' },
+                    { id: 'FD004', label: 'FD004', desc: '6 Conds, 2 Faults (HPC+Fan)' },
+                  ].map((ds) => (
+                    <button
+                      key={ds.id}
+                      type="button"
+                      onClick={() => setSelectedDataset(ds.id)}
+                      title={ds.desc}
+                      style={{
+                        padding: '6px 14px',
+                        fontSize: '12px',
+                        fontWeight: selectedDataset === ds.id ? 700 : 500,
+                        backgroundColor: selectedDataset === ds.id ? 'var(--primary-600)' : '#ffffff',
+                        color: selectedDataset === ds.id ? '#ffffff' : 'var(--text-main)',
+                        border: selectedDataset === ds.id ? '1px solid var(--primary-700)' : '1px solid var(--border-medium)',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {ds.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               {/* Drop Zone */}
               <FileUploadZone
                 onFileSelected={handleFileSelected}
@@ -678,7 +732,7 @@ export default function App() {
                   Prediction Results & Degradation Analysis
                 </h2>
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Evaluated with Stacked LSTM ({predictionResponse?.model_version || health?.model_version || 'lstm-stacked-v1.0'}).
+                  Evaluated with {predictionResponse?.model_type || 'PINN'} ({predictionResponse?.model_version || health?.model_version || 'pinn-v1.0'}) for dataset {predictionResponse?.dataset || selectedDataset}.
                 </p>
               </div>
 
