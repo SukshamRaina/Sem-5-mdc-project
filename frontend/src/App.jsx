@@ -618,7 +618,14 @@ export default function App() {
                     <button
                       key={ds.id}
                       type="button"
-                      onClick={() => setSelectedDataset(ds.id)}
+                      onClick={() => {
+                        if (selectedDataset !== ds.id) {
+                          setSelectedDataset(ds.id);
+                          setPredictionResponse(null);
+                          setSelectedEngineId(null);
+                          setUploadError(null);
+                        }
+                      }}
                       title={ds.desc}
                       style={{
                         padding: '6px 14px',
