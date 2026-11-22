@@ -19,7 +19,10 @@ ATTRIBUTION_METHODOLOGY_NOTE: str = (
     "evaluating exact model gradients d(RUL)/d(X) via tf.GradientTape across the 30-cycle "
     "temporal window. Gradient sensitivity quantifies the local directional sensitivity "
     "of the neural network's RUL output with respect to normalized sensor telemetry; "
-    "it represents local model sensitivity and should not be confused with causal intervention importance."
+    "it represents local model sensitivity and should not be confused with causal intervention importance. "
+    "Traditional KernelSHAP or DeepSHAP methods are architecturally unsuitable and computationally prohibitive "
+    "for recurrent neural networks during real-time inference, as flattening 3D temporal sequences destroys "
+    "temporal Markov dependencies and incurs severe runtime latency."
 )
 
 SENSOR_SUBSYSTEM_MAP: Dict[str, Dict[str, str]] = {
@@ -345,7 +348,7 @@ class ModelExplainer:
             )
 
         return {
-            "attribution_method": "Physics-Informed Gradient Sensitivity & Degradation Drift",
+            "attribution_method": "Physics-Informed Gradient-Based Sensitivity & Degradation Drift",
             "method_limitation_note": ATTRIBUTION_METHODOLOGY_NOTE,
             "feature_attributions": attributions,
             "top_contributing_sensors": top_contributors,

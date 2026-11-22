@@ -1,0 +1,210 @@
+{
+  "FD001": {
+    "dataset": "FD001",
+    "files_exist": {
+      "pinn_model.keras": true,
+      "scaler.joblib": true,
+      "feature_columns.json": true,
+      "model_metadata.json": true,
+      "pinn_metrics.json": true,
+      "training_history.json": true,
+      "physics_config.json": true
+    },
+    "model_loaded": true,
+    "input_dim_matches": true,
+    "best_val_epoch": {
+      "epoch": 16,
+      "val_loss": 172.4191,
+      "total_epochs": 25
+    },
+    "json_metrics": {
+      "rmse": 14.335,
+      "mae": 10.328,
+      "r2_score": 0.881,
+      "nasa_score": 327.81
+    },
+    "independent_metrics": {
+      "mae": 10.328,
+      "rmse": 14.335,
+      "r2_score": 0.881,
+      "nasa_score": 327.81
+    },
+    "order_aligned": true,
+    "nan_inf_negative_check": {
+      "has_nan": false,
+      "has_inf": false,
+      "has_neg": false,
+      "min_rul": 7.8,
+      "max_rul": 124.36
+    },
+    "physics_rate_stats": {
+      "mean_rate": 5.3e-05,
+      "min_rate": 0.0,
+      "max_rate": 0.000823,
+      "strictly_positive": true
+    },
+    "monotonicity_check": {},
+    "independent_metrics_clipped": {
+      "mae": 9.258,
+      "rmse": 12.762,
+      "r2_score": 0.8986,
+      "nasa_score": 273.82
+    }
+  },
+  "FD002": {
+    "dataset": "FD002",
+    "files_exist": {
+      "pinn_model.keras": true,
+      "scaler.joblib": true,
+      "feature_columns.json": true,
+      "model_metadata.json": true,
+      "pinn_metrics.json": true,
+      "training_history.json": true,
+      "physics_config.json": true
+    },
+    "model_loaded": true,
+    "input_dim_matches": true,
+    "best_val_epoch": {
+      "epoch": 12,
+      "val_loss": 226.1382,
+      "total_epochs": 22
+    },
+    "json_metrics": {
+      "rmse": 25.854,
+      "mae": 16.983,
+      "r2_score": 0.7689,
+      "nasa_score": 6559.4
+    },
+    "independent_metrics": {
+      "mae": 16.983,
+      "rmse": 25.854,
+      "r2_score": 0.7689,
+      "nasa_score": 6559.4
+    },
+    "order_aligned": true,
+    "nan_inf_negative_check": {
+      "has_nan": false,
+      "has_inf": false,
+      "has_neg": false,
+      "min_rul": 3.66,
+      "max_rul": 127.55
+    },
+    "physics_rate_stats": {
+      "mean_rate": 0.05369,
+      "min_rate": 0.0,
+      "max_rate": 0.263632,
+      "strictly_positive": true
+    },
+    "monotonicity_check": {},
+    "independent_metrics_clipped": {
+      "mae": 9.513,
+      "rmse": 13.06,
+      "r2_score": 0.9075,
+      "nasa_score": 757.48
+    }
+  },
+  "FD003": {
+    "dataset": "FD003",
+    "files_exist": {
+      "pinn_model.keras": true,
+      "scaler.joblib": true,
+      "feature_columns.json": true,
+      "model_metadata.json": true,
+      "pinn_metrics.json": true,
+      "training_history.json": true,
+      "physics_config.json": true
+    },
+    "model_loaded": true,
+    "input_dim_matches": true,
+    "best_val_epoch": {
+      "epoch": 23,
+      "val_loss": 110.1053,
+      "total_epochs": 25
+    },
+    "json_metrics": {
+      "rmse": 13.103,
+      "mae": 9.356,
+      "r2_score": 0.8998,
+      "nasa_score": 324.07
+    },
+    "independent_metrics": {
+      "mae": 9.356,
+      "rmse": 13.103,
+      "r2_score": 0.8998,
+      "nasa_score": 324.07
+    },
+    "order_aligned": true,
+    "nan_inf_negative_check": {
+      "has_nan": false,
+      "has_inf": false,
+      "has_neg": false,
+      "min_rul": 7.11,
+      "max_rul": 124.06
+    },
+    "physics_rate_stats": {
+      "mean_rate": 4e-06,
+      "min_rate": 0.0,
+      "max_rate": 4.9e-05,
+      "strictly_positive": true
+    },
+    "monotonicity_check": {},
+    "independent_metrics_clipped": {
+      "mae": 7.796,
+      "rmse": 11.607,
+      "r2_score": 0.9122,
+      "nasa_score": 291.45
+    }
+  },
+  "FD004": {
+    "dataset": "FD004",
+    "files_exist": {
+      "pinn_model.keras": true,
+      "scaler.joblib": true,
+      "feature_columns.json": true,
+      "model_metadata.json": true,
+      "pinn_metrics.json": true,
+      "training_history.json": true,
+      "physics_config.json": true
+    },
+    "model_loaded": true,
+    "input_dim_matches": true,
+    "best_val_epoch": {
+      "epoch": 17,
+      "val_loss": 135.3073,
+      "total_epochs": 25
+    },
+    "json_metrics": {
+      "rmse": 25.91,
+      "mae": 17.925,
+      "r2_score": 0.7742,
+      "nasa_score": 6053.31
+    },
+    "independent_metrics": {
+      "mae": 17.925,
+      "rmse": 25.91,
+      "r2_score": 0.7742,
+      "nasa_score": 6053.32
+    },
+    "order_aligned": true,
+    "nan_inf_negative_check": {
+      "has_nan": false,
+      "has_inf": false,
+      "has_neg": false,
+      "min_rul": 9.32,
+      "max_rul": 131.27
+    },
+    "physics_rate_stats": {
+      "mean_rate": 0.032038,
+      "min_rate": 0.0,
+      "max_rate": 0.320863,
+      "strictly_positive": true
+    },
+    "monotonicity_check": {},
+    "independent_metrics_clipped": {
+      "mae": 9.437,
+      "rmse": 13.576,
+      "r2_score": 0.9002,
+      "nasa_score": 955.77
+    }
+  }
+}

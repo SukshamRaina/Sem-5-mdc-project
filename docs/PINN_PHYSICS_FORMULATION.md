@@ -98,39 +98,54 @@ This fundamental physical principle enforces that as operating flight cycles ela
 
 ## 5. Automatic Differentiation & Loss Formulation
 
-### 5.1 Exact Derivative Calculation via `tf.GradientTape`
-Let $t_{\text{norm}} = \frac{t}{t_{\max}}$ be the normalized continuous cycle coordinate.
-In our PINN, the operational cycle tensor $t_{\text{norm}}$ is tracked differentiably during the forward pass:
+### 5.1 Coordinate Transformation & Chain Rule via `tf.GradientTape`
+Let $t \in [1, N_{\max}]$ denote the continuous operational cycle, normalized for neural network numerical conditioning as:
+$$t_{\text{norm}} = \frac{t}{T_{\text{scale}}}, \quad \text{where } T_{\text{scale}} = 100.0$$
+
+The input tensor $t_{\text{norm}}$ is tracked differentiably during the forward pass using automatic differentiation:
 ```python
-with tf.GradientTape(persistent=True) as tape:
-    tape.watch(t_norm)
-    rul_pred, rate_pred = pinn_model([X_sensors, t_norm], training=True)
-    
-d_rul_dt = tape.gradient(rul_pred, t_norm)
+with tf.GradientTape() as outer_tape:
+    with tf.GradientTape() as inner_tape:
+        inner_tape.watch(t_batch)  # t_norm tensor
+        rul_pred, rate_pred = model([X_batch, t_batch], training=True)
+
+    # 1. Automatic Differentiation with respect to normalized coordinate:
+    d_rul_dt_raw = inner_tape.gradient(rul_pred, t_batch)
+
+    # 2. Coordinate Chain Rule to recover physical derivative:
+    # d(RUL)/dt = d(RUL)/d(t_norm) * d(t_norm)/dt = (1 / T_scale) * d(RUL)/d(t_norm)
+    d_rul_dt = (1.0 / self.time_scale) * d_rul_dt_raw
 ```
-This guarantees exact, analytical derivatives without numerical discretization errors.
+
+#### Physical Dimensionality & Units:
+- $\widehat{\text{RUL}}$ has units of **cycles of remaining useful life**.
+- $t$ has units of **operating flight cycles**.
+- Therefore, the physical derivative $\frac{\partial \widehat{\text{RUL}}}{\partial t}$ is **dimensionless** ($\text{cycles}/\text{cycle}$):
+  $$\left[ \frac{\partial \widehat{\text{RUL}}}{\partial t} \right] = \frac{\text{cycles}}{\text{cycle}} \approx \begin{cases} 0.0 & \text{during healthy plateau} \\ -1.0 & \text{during nominal wear} \\ < -1.0 & \text{during accelerated late wear} \end{cases}$$
+- The learned degradation rate head $g_\theta \ge 0$ (via Softplus) represents the non-negative instantaneous wear rate $[\text{cycles}/\text{cycle}]$.
 
 ### 5.2 Composite Loss Function
 The total optimization objective $\mathcal{L}_{\text{total}}$ is a composite multi-objective loss:
 $$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{data}} + \lambda_{\text{physics}} \mathcal{L}_{\text{physics}} + \lambda_{\text{monotonicity}} \mathcal{L}_{\text{monotonicity}} + \lambda_{\text{boundary}} \mathcal{L}_{\text{boundary}}$$
 
 #### 1. Data Loss ($\mathcal{L}_{\text{data}}$)
-Measures supervised RUL prediction accuracy against ground-truth labels:
+Measures supervised RUL prediction accuracy against labeled ground truth:
 $$\mathcal{L}_{\text{data}} = \frac{1}{B} \sum_{i=1}^B (\text{RUL}_i - \widehat{\text{RUL}}_i)^2$$
 
 #### 2. Physics Residual Loss ($\mathcal{L}_{\text{physics}}$)
-Penalizes violations of the governing degradation ODE:
-$$r_{\text{physics}, i} = -\frac{\partial \widehat{\text{RUL}}_i}{\partial t_{\text{norm}}} - RUL_{\max} \cdot g_\theta(S_i, U_i)$$
+Enforces the governing degradation kinetics ODE $\frac{\partial \widehat{\text{RUL}}}{\partial t} = -g_\theta(X, t)$:
+$$r_{\text{physics}, i} = \frac{\partial \widehat{\text{RUL}}_i}{\partial t} + g_{\theta}(X_i, t_i)$$
 $$\mathcal{L}_{\text{physics}} = \frac{1}{B} \sum_{i=1}^B r_{\text{physics}, i}^2$$
+Both terms in $r_{\text{physics}}$ share identical dimensions ($\text{cycles}/\text{cycle}$), ensuring natural balance with typical residuals $\mathcal{O}(0.01 - 0.1)$.
 
 #### 3. Monotonicity Constraint Loss ($\mathcal{L}_{\text{monotonicity}}$)
-Penalizes unphysical positive derivatives where predicted RUL increases over operational time:
-$$\mathcal{L}_{\text{monotonicity}} = \frac{1}{B} \sum_{i=1}^B \left( \max\left(0, \frac{\partial \widehat{\text{RUL}}_i}{\partial t_{\text{norm}}}\right) \right)^2$$
+Penalizes unphysical positive derivatives where predicted RUL increases over operational cycles (thermodynamic irreversibility of wear):
+$$\mathcal{L}_{\text{monotonicity}} = \frac{1}{B} \sum_{i=1}^B \left( \max\left(0, \frac{\partial \widehat{\text{RUL}}_i}{\partial t}\right) \right)^2$$
 
 #### 4. Boundary Condition Loss ($\mathcal{L}_{\text{boundary}}$)
-Enforces physical limits at initial healthy conditions and non-negativity:
+Penalizes negative RUL projections:
 $$\mathcal{L}_{\text{boundary}} = \frac{1}{B} \sum_{i=1}^B \left( \max(0, -\widehat{\text{RUL}}_i) \right)^2$$
-*(Non-negative RUL is also structurally guaranteed via ReLU / Softplus output projection).*
+*(Non-negative RUL at evaluation and inference is enforced via non-negative clipping $\max(0, \widehat{\text{RUL}})$).*
 
 ### 5.3 Configurable Loss Weights
 - $\lambda_{\text{physics}} = 0.1$
