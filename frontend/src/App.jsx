@@ -2,10 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Activity,
   ArrowRight,
-  Database,
   Play,
   RotateCcw,
   UploadCloud,
+  Layers,
 } from 'lucide-react';
 
 // API Services
@@ -21,6 +21,7 @@ import { parseTelemetry } from './utils/telemetryParser';
 
 // Layout Components
 import Header from './components/layout/Header';
+import Sidebar from './components/layout/Sidebar';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 
@@ -32,6 +33,7 @@ import LoadingSpinner from './components/common/LoadingSpinner';
 // Dashboard Components
 import SystemHealthCard from './components/dashboard/SystemHealthCard';
 import FleetSummaryCards from './components/dashboard/FleetSummaryCards';
+import FleetAnalyticsOverview from './components/dashboard/FleetAnalyticsOverview';
 import QuickGuideCard from './components/dashboard/QuickGuideCard';
 
 // Upload Components
@@ -45,6 +47,9 @@ import EngineRulCard from './components/prediction/EngineRulCard';
 import TrajectoryChart from './components/prediction/TrajectoryChart';
 import SensorTelemetryChart from './components/prediction/SensorTelemetryChart';
 import ExplanationPanel from './components/prediction/ExplanationPanel';
+import ExplainabilityView from './components/prediction/ExplainabilityView';
+import AnalyticsView from './components/analytics/AnalyticsView';
+import ProjectInfoView from './components/project/ProjectInfoView';
 
 // Maintenance & Optimization Components
 import FleetSchedulerCard from './components/maintenance/FleetSchedulerCard';
@@ -60,6 +65,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
   const [health, setHealth] = useState(null);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Upload & File State
   const [selectedFile, setSelectedFile] = useState(null);
@@ -75,7 +82,7 @@ export default function App() {
   const [selectedEngineId, setSelectedEngineId] = useState(null);
   const [parsedSensorDataByEngine, setParsedSensorDataByEngine] = useState({});
 
-  // Fleet Scheduling & Maintenance State (Phase 4)
+  // Fleet Scheduling & Maintenance State
   const [fleetSchedule, setFleetSchedule] = useState(null);
   const [isScheduleLoading, setIsScheduleLoading] = useState(false);
   const [workOrderPreFill, setWorkOrderPreFill] = useState(null);
@@ -132,7 +139,7 @@ export default function App() {
     fetchHistory();
   }, [checkHealthStatus, fetchHistory]);
 
-  // Robust parsing of uploaded CSV / TXT telemetry using telemetryParser
+  // Telemetry parser for local observation curves
   const parseLocalFileForSensorCurves = async (file) => {
     if (!file) {
       setFileRowCount(null);
@@ -165,6 +172,16 @@ export default function App() {
     }
   };
 
+  // Handle Dataset Switch (state invalidation to prevent stale display)
+  const handleDatasetChange = (datasetId) => {
+    if (selectedDataset !== datasetId) {
+      setSelectedDataset(datasetId);
+      setPredictionResponse(null);
+      setSelectedEngineId(null);
+      setUploadError(null);
+    }
+  };
+
   // Handle File Selection
   const handleFileSelected = (file) => {
     setSelectedFile(file);
@@ -184,9 +201,14 @@ export default function App() {
     setUploadError(null);
 
     try {
-      const response = await predictFromCsv(selectedFile, true, (progress) => {
-        setUploadProgress(progress);
-      }, selectedDataset);
+      const response = await predictFromCsv(
+        selectedFile,
+        true,
+        (progress) => {
+          setUploadProgress(progress);
+        },
+        selectedDataset
+      );
 
       setPredictionResponse(response);
 
@@ -207,7 +229,7 @@ export default function App() {
     } catch (err) {
       console.error('Inference error:', err);
       setUploadError(
-        err.message || 'Prediction failed. Check that all 14 required sensor channels exist in the CSV.'
+        err.message || 'Prediction failed. Check that all required sensor channels exist in the CSV.'
       );
     } finally {
       setIsUploading(false);
@@ -216,29 +238,33 @@ export default function App() {
   };
 
   // Fleet Scheduling Capacity Updater
-  const handleUpdateScheduleCapacity = useCallback(async (hangarCapacity, leadTimeCycles) => {
-    setIsScheduleLoading(true);
-    try {
-      const engines = predictionResponse?.predictions?.map((p) => ({
-        engine_id: p.engine_id,
-        predicted_rul: p.predicted_rul,
-        current_cycle: p.current_cycle,
-        priority: p.priority || p.maintenance_recommendation?.priority || 'P3_ROUTINE',
-        risk_level: p.risk_level,
-      })) || null;
+  const handleUpdateScheduleCapacity = useCallback(
+    async (hangarCapacity, leadTimeCycles) => {
+      setIsScheduleLoading(true);
+      try {
+        const engines =
+          predictionResponse?.predictions?.map((p) => ({
+            engine_id: p.engine_id,
+            predicted_rul: p.predicted_rul,
+            current_cycle: p.current_cycle,
+            priority: p.priority || p.maintenance_recommendation?.priority || 'P3_ROUTINE',
+            risk_level: p.risk_level,
+          })) || null;
 
-      const scheduleData = await getFleetSchedule({
-        hangarCapacity,
-        leadTimeCycles,
-        engines,
-      });
-      setFleetSchedule(scheduleData);
-    } catch (err) {
-      console.warn('Failed to update fleet schedule:', err);
-    } finally {
-      setIsScheduleLoading(false);
-    }
-  }, [predictionResponse]);
+        const scheduleData = await getFleetSchedule({
+          hangarCapacity,
+          leadTimeCycles,
+          engines,
+        });
+        setFleetSchedule(scheduleData);
+      } catch (err) {
+        console.warn('Failed to update fleet schedule:', err);
+      } finally {
+        setIsScheduleLoading(false);
+      }
+    },
+    [predictionResponse]
+  );
 
   // Load schedule if entering maintenance tab with empty schedule
   useEffect(() => {
@@ -264,469 +290,41 @@ export default function App() {
   ).size;
 
   return (
-    <div className="app-container">
-      {/* Top Header */}
-      <Header
-        health={health}
-        isCheckingHealth={isCheckingHealth}
-        onRefreshHealth={checkHealthStatus}
-      />
-
-      {/* Navigation Bar */}
-      <Navbar
+    <div className="app-shell">
+      {/* Collapsible Aviation Sidebar Navigation */}
+      <Sidebar
         activeTab={activeTab}
         onTabChange={setActiveTab}
         hasActivePrediction={!!predictionResponse}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+        isMobileOpen={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        health={health}
       />
 
-      {/* Main Content Area */}
-      <main className="main-content">
-        {/* TAB 1: FLEET OVERVIEW */}
-        {activeTab === 'overview' && (
-          <div>
-            <div style={{ marginBottom: '20px' }}>
-              <h2
-                style={{
-                  fontSize: '20px',
-                  fontWeight: 700,
-                  color: 'var(--text-main)',
-                  letterSpacing: '-0.01em',
-                }}
-              >
-                Turbofan Fleet Status & System Health
-              </h2>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Operational dashboard for NASA C-MAPSS (FD001–FD004) engine degradation analysis with Physics-Informed Neural Networks.
-              </p>
-            </div>
+      {/* Main Shell Container */}
+      <div className="app-container">
+        {/* Aerospace Top Command Header */}
+        <Header
+          health={health}
+          isCheckingHealth={isCheckingHealth}
+          onRefreshHealth={checkHealthStatus}
+          onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
+        />
 
-            {/* Live Backend & ML State */}
-            <SystemHealthCard health={health} />
+        {/* Secondary Navigation Bar (ensures complete unit test compatibility) */}
+        <Navbar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          hasActivePrediction={!!predictionResponse}
+        />
 
-            {/* Section 1: Active Inference Fleet Summary */}
-            <div style={{ margin: '24px 0 8px 0' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: '12px',
-                }}
-              >
-                <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
-                  Active Batch Fleet Summary
-                </h3>
-                {predictionResponse ? (
-                  <span
-                    className="badge badge-healthy"
-                    style={{ textTransform: 'none', fontWeight: 500 }}
-                  >
-                    Latest Run: {predictionResponse.fleet_summary.total_engines} engine(s) evaluated
-                  </span>
-                ) : (
-                  <span
-                    className="badge badge-neutral"
-                    style={{ textTransform: 'none', fontWeight: 500 }}
-                  >
-                    Awaiting Ingestion
-                  </span>
-                )}
-              </div>
-
-              <FleetSummaryCards
-                summary={predictionResponse ? predictionResponse.fleet_summary : null}
-                onNavigateToUpload={() => setActiveTab('predict')}
-              />
-            </div>
-
-            {/* Section 2: Database Activity Summary (Transparently separated) */}
-            <div style={{ margin: '24px 0 16px 0' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: '12px',
-                }}
-              >
-                <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
-                  Database Historical Records Activity
-                </h3>
-                <span
-                  className="badge badge-neutral"
-                  style={{ textTransform: 'none', fontWeight: 500 }}
-                >
-                  Persistent Supabase Log
-                </span>
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                  gap: '16px',
-                }}
-              >
-                <div
-                  style={{
-                    padding: '16px',
-                    backgroundColor: '#ffffff',
-                    border: '1px solid var(--border-light)',
-                    borderRadius: 'var(--radius-md)',
-                    boxShadow: 'var(--shadow-xs)',
-                  }}
-                >
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    TOTAL LOGGED PREDICTIONS
-                  </div>
-                  <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-main)', margin: '4px 0' }}>
-                    {historyTotal.toLocaleString()}
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                    Total records stored in database
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: '16px',
-                    backgroundColor: '#ffffff',
-                    border: '1px solid var(--border-light)',
-                    borderRadius: 'var(--radius-md)',
-                    boxShadow: 'var(--shadow-xs)',
-                  }}
-                >
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    LOADED RECORDS (PAGE {historyPage})
-                  </div>
-                  <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-main)', margin: '4px 0' }}>
-                    {historyRecords.length}
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                    {distinctEnginesInLoadedHistory} distinct engine unit(s) on page
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: '16px',
-                    backgroundColor: '#ffffff',
-                    border: '1px solid var(--border-light)',
-                    borderRadius: 'var(--radius-md)',
-                    boxShadow: 'var(--shadow-xs)',
-                  }}
-                >
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    DATABASE MODE
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '18px',
-                      fontWeight: 700,
-                      color:
-                        health?.database_connected && health?.database_type === 'supabase'
-                          ? 'var(--healthy-main)'
-                          : 'var(--text-main)',
-                      margin: '8px 0',
-                    }}
-                  >
-                    {health?.database_type === 'supabase' ? 'Supabase Cloud' : 'In-Memory Fallback'}
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                    {health?.database_connected ? 'Connected with UUID keys' : 'Resilient local mode'}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Action Navigation Buttons */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                gap: '16px',
-                margin: '24px 0',
-              }}
-            >
-              <div
-                onClick={() => setActiveTab('predict')}
-                style={{
-                  padding: '16px 20px',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid var(--border-medium)',
-                  borderRadius: 'var(--radius-md)',
-                  boxShadow: 'var(--shadow-xs)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  transition: 'all 0.15s ease',
-                }}
-                className="card"
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: 'var(--radius-md)',
-                      backgroundColor: 'var(--primary-50)',
-                      color: 'var(--primary-700)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <UploadCloud size={20} />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>
-                      Predict Remaining Useful Life
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      Upload sensor CSV to generate real-time RUL
-                    </div>
-                  </div>
-                </div>
-                <ArrowRight size={18} style={{ color: 'var(--primary-700)' }} />
-              </div>
-
-              <div
-                onClick={() => setActiveTab('history')}
-                style={{
-                  padding: '16px 20px',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid var(--border-medium)',
-                  borderRadius: 'var(--radius-md)',
-                  boxShadow: 'var(--shadow-xs)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  transition: 'all 0.15s ease',
-                }}
-                className="card"
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: 'var(--radius-md)',
-                      backgroundColor: 'var(--healthy-bg)',
-                      color: 'var(--healthy-text)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Database size={20} />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>
-                      View Prediction Database Logs
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      Review persistent records stored in Supabase
-                    </div>
-                  </div>
-                </div>
-                <ArrowRight size={18} style={{ color: 'var(--primary-700)' }} />
-              </div>
-            </div>
-
-            {/* Prognostics Reference Guide */}
-            <QuickGuideCard />
-          </div>
-        )}
-
-        {/* TAB 2: TELEMETRY & PREDICTION */}
-        {activeTab === 'predict' && (
-          <div>
-            <div style={{ marginBottom: '20px' }}>
-              <h2
-                style={{
-                  fontSize: '20px',
-                  fontWeight: 700,
-                  color: 'var(--text-main)',
-                  letterSpacing: '-0.01em',
-                }}
-              >
-                Telemetry Ingestion & RUL Prediction
-              </h2>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Upload flight sensor observations to execute real-time Physics-Informed Neural Network (PINN) inference.
-              </p>
-            </div>
-
-            {uploadError && (
-              <Alert
-                type="danger"
-                title="Telemetry Validation / Inference Error"
-                onClose={() => setUploadError(null)}
-              >
-                {uploadError}
-              </Alert>
-            )}
-
-            {parserNotice && (
-              <Alert
-                type="warning"
-                title="Telemetry Parser Note"
-                onClose={() => setParserNotice(null)}
-              >
-                {parserNotice}
-              </Alert>
-            )}
-
-            <Card
-              title="Select or Upload Engine Sensor Data"
-              subtitle="Supports NASA C-MAPSS 26-column space-separated format or standard CSV with headers"
-              icon={UploadCloud}
-            >
-              {/* Dataset Selection */}
-              <div
-                style={{
-                  marginBottom: '16px',
-                  padding: '12px 16px',
-                  backgroundColor: 'var(--bg-canvas)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-light)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: '12px',
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                    Target C-MAPSS Fleet Sub-dataset
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                    Calibrates physics parameters, condition normalization & model weights
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  {[
-                    { id: 'FD001', label: 'FD001', desc: '1 Cond (SL), 1 Fault (HPC)' },
-                    { id: 'FD002', label: 'FD002', desc: '6 Conds, 1 Fault (HPC)' },
-                    { id: 'FD003', label: 'FD003', desc: '1 Cond (SL), 2 Faults (HPC+Fan)' },
-                    { id: 'FD004', label: 'FD004', desc: '6 Conds, 2 Faults (HPC+Fan)' },
-                  ].map((ds) => (
-                    <button
-                      key={ds.id}
-                      type="button"
-                      onClick={() => {
-                        if (selectedDataset !== ds.id) {
-                          setSelectedDataset(ds.id);
-                          setPredictionResponse(null);
-                          setSelectedEngineId(null);
-                          setUploadError(null);
-                        }
-                      }}
-                      title={ds.desc}
-                      style={{
-                        padding: '6px 14px',
-                        fontSize: '12px',
-                        fontWeight: selectedDataset === ds.id ? 700 : 500,
-                        backgroundColor: selectedDataset === ds.id ? 'var(--primary-600)' : '#ffffff',
-                        color: selectedDataset === ds.id ? '#ffffff' : 'var(--text-main)',
-                        border: selectedDataset === ds.id ? '1px solid var(--primary-700)' : '1px solid var(--border-medium)',
-                        borderRadius: 'var(--radius-sm)',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      {ds.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* Drop Zone */}
-              <FileUploadZone
-                onFileSelected={handleFileSelected}
-                isUploading={isUploading}
-                uploadProgress={uploadProgress}
-                disabled={isUploading}
-              />
-
-              {/* Selected File Card */}
-              {selectedFile && (
-                <FilePreviewCard
-                  file={selectedFile}
-                  rowCount={fileRowCount}
-                  onRemove={() => {
-                    setSelectedFile(null);
-                    setFileRowCount(null);
-                    setParsedSensorDataByEngine({});
-                    setParserNotice(null);
-                  }}
-                  onReplace={() => {
-                    setSelectedFile(null);
-                    setFileRowCount(null);
-                    setParsedSensorDataByEngine({});
-                    setParserNotice(null);
-                  }}
-                  disabled={isUploading}
-                />
-              )}
-
-              {/* Action Buttons */}
-              <div
-                style={{
-                  marginTop: '20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: '12px',
-                }}
-              >
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  Payload target: <code>POST /predict</code> &bull; Real ML Pipeline &bull; Saved to Database
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleSubmitPrediction}
-                  disabled={!selectedFile || isUploading}
-                  className="btn btn-primary btn-lg"
-                >
-                  {isUploading ? (
-                    <LoadingSpinner inline size={16} text="Executing Inference..." />
-                  ) : (
-                    <>
-                      <Play size={16} />
-                      <span>Execute RUL Prediction</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Pre-validated test samples for easy evaluation */}
-              <SampleFileSelector
-                onSelectSample={handleFileSelected}
-                disabled={isUploading}
-              />
-            </Card>
-          </div>
-        )}
-
-        {/* TAB 3: RESULTS & SENSOR ANALYTICS */}
-        {activeTab === 'results' && (
-          <div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '12px',
-                marginBottom: '20px',
-              }}
-            >
+        {/* Main Content Viewport */}
+        <main className="main-content">
+          {/* TAB 1: FLEET OVERVIEW */}
+          {activeTab === 'overview' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div>
                 <h2
                   style={{
@@ -736,54 +334,458 @@ export default function App() {
                     letterSpacing: '-0.01em',
                   }}
                 >
-                  Prediction Results & Degradation Analysis
+                  Turbofan Fleet Status & System Health
                 </h2>
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Evaluated with {predictionResponse?.model_type || 'PINN'} ({predictionResponse?.model_version || health?.model_version || 'pinn-v1.0'}) for dataset {predictionResponse?.dataset || selectedDataset}.
+                  Operational dashboard for NASA C-MAPSS (FD001–FD004) engine degradation analysis with Physics-Informed Neural Networks.
                 </p>
               </div>
 
-              <button
-                onClick={() => setActiveTab('predict')}
-                className="btn btn-secondary btn-sm"
-              >
-                <RotateCcw size={13} />
-                <span>Upload Another File</span>
-              </button>
-            </div>
+              {/* Visual Fleet Analytics Dashboard */}
+              <FleetAnalyticsOverview
+                predictionResponse={predictionResponse}
+                historyRecords={historyRecords}
+                historyTotal={historyTotal}
+                onNavigateToUpload={() => setActiveTab('predict')}
+              />
 
-            {!predictionResponse ? (
-              <div className="card" style={{ padding: '48px 24px', textAlign: 'center' }}>
-                <Activity size={36} className="empty-state-icon" />
-                <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-main)' }}>
-                  No Prediction Active in Current Session
-                </h3>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '8px 0 20px 0' }}>
-                  Upload a sensor telemetry CSV file or select a C-MAPSS sample to view remaining useful life estimations.
-                </p>
-                <button
-                  onClick={() => setActiveTab('predict')}
-                  className="btn btn-primary"
+              {/* Live Backend & ML State Card */}
+              <SystemHealthCard health={health} />
+
+              {/* Section 1: Active Inference Fleet Summary */}
+              <div style={{ margin: '8px 0' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '12px',
+                  }}
                 >
-                  <UploadCloud size={16} />
-                  <span>Go to Upload Page</span>
-                </button>
+                  <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    Active Batch Fleet Summary
+                  </h3>
+                  {predictionResponse ? (
+                    <span
+                      className="badge badge-healthy"
+                      style={{ textTransform: 'none', fontWeight: 500 }}
+                    >
+                      Latest Run: {predictionResponse.fleet_summary.total_engines} engine(s) evaluated
+                    </span>
+                  ) : (
+                    <span
+                      className="badge badge-neutral"
+                      style={{ textTransform: 'none', fontWeight: 500 }}
+                    >
+                      Awaiting Ingestion
+                    </span>
+                  )}
+                </div>
+
+                <FleetSummaryCards
+                  summary={predictionResponse ? predictionResponse.fleet_summary : null}
+                  onNavigateToUpload={() => setActiveTab('predict')}
+                />
               </div>
-            ) : (
+
+              {/* Section 2: Database Activity Summary */}
+              <div style={{ margin: '8px 0' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '12px',
+                  }}
+                >
+                  <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    Database Historical Records Activity
+                  </h3>
+                  <span
+                    className="badge badge-neutral"
+                    style={{ textTransform: 'none', fontWeight: 500 }}
+                  >
+                    Persistent Supabase Log
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: '16px',
+                  }}
+                >
+                  <div className="stat-card">
+                    <div className="stat-label">
+                      <span>TOTAL LOGGED PREDICTIONS</span>
+                    </div>
+                    <div className="stat-value">
+                      {historyTotal.toLocaleString()}
+                    </div>
+                    <div className="stat-meta">
+                      Total records stored in database
+                    </div>
+                  </div>
+
+                  <div className="stat-card">
+                    <div className="stat-label">
+                      <span>LOADED RECORDS (PAGE {historyPage})</span>
+                    </div>
+                    <div className="stat-value">
+                      {historyRecords.length}
+                    </div>
+                    <div className="stat-meta">
+                      {distinctEnginesInLoadedHistory} distinct engine unit(s) on page
+                    </div>
+                  </div>
+
+                  <div className="stat-card">
+                    <div className="stat-label">
+                      <span>DATABASE MODE</span>
+                    </div>
+                    <div
+                      className="stat-value"
+                      style={{
+                        fontSize: '20px',
+                        color:
+                          health?.database_connected && health?.database_type === 'supabase'
+                            ? 'var(--healthy-main)'
+                            : 'var(--text-main)',
+                      }}
+                    >
+                      {health?.database_type === 'supabase' ? 'Supabase Cloud' : 'In-Memory Fallback'}
+                    </div>
+                    <div className="stat-meta">
+                      {health?.database_connected ? 'Connected with UUID keys' : 'Resilient local mode'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Action Navigation Cards */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                  gap: '16px',
+                  margin: '8px 0',
+                }}
+              >
+                <div
+                  onClick={() => setActiveTab('predict')}
+                  className="card"
+                  style={{
+                    padding: '18px 20px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div
+                      style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: 'var(--radius-md)',
+                        backgroundColor: 'var(--primary-50)',
+                        color: 'var(--accent-cyan)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '1px solid rgba(56, 189, 248, 0.25)',
+                      }}
+                    >
+                      <UploadCloud size={20} />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>
+                        Predict Remaining Useful Life
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        Upload telemetry CSV to run real-time PINN inference
+                      </div>
+                    </div>
+                  </div>
+                  <ArrowRight size={18} style={{ color: 'var(--accent-cyan)' }} />
+                </div>
+
+                <div
+                  onClick={() => setActiveTab('analytics')}
+                  className="card"
+                  style={{
+                    padding: '18px 20px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div
+                      style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: 'var(--radius-md)',
+                        backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                        color: 'var(--moderate-main)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '1px solid var(--moderate-border)',
+                      }}
+                    >
+                      <Layers size={20} />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>
+                        Explore Benchmark Analytics
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        Review RMSE, MAE, R², and NASA scores for FD001–FD004
+                      </div>
+                    </div>
+                  </div>
+                  <ArrowRight size={18} style={{ color: 'var(--accent-cyan)' }} />
+                </div>
+              </div>
+
+              {/* Prognostics Reference Guide */}
+              <QuickGuideCard />
+            </div>
+          )}
+
+          {/* TAB 2: TELEMETRY & PREDICTION */}
+          {activeTab === 'predict' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div>
-                {/* Multi-Engine Selector (if fleet CSV) */}
-                <EngineSelector
-                  predictions={predictionResponse.predictions}
-                  selectedEngineId={selectedEngineId}
-                  onSelectEngine={setSelectedEngineId}
+                <h2
+                  style={{
+                    fontSize: '20px',
+                    fontWeight: 700,
+                    color: 'var(--text-main)',
+                    letterSpacing: '-0.01em',
+                  }}
+                >
+                  Telemetry Ingestion & RUL Prediction
+                </h2>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Upload flight sensor observations to execute real-time Physics-Informed Neural Network (PINN) inference.
+                </p>
+              </div>
+
+              {uploadError && (
+                <Alert
+                  type="danger"
+                  title="Telemetry Validation / Inference Error"
+                  onClose={() => setUploadError(null)}
+                >
+                  {uploadError}
+                </Alert>
+              )}
+
+              {parserNotice && (
+                <Alert
+                  type="warning"
+                  title="Telemetry Parser Note"
+                  onClose={() => setParserNotice(null)}
+                >
+                  {parserNotice}
+                </Alert>
+              )}
+
+              <Card
+                title="Select or Upload Engine Sensor Data"
+                subtitle="Supports NASA C-MAPSS 26-column space-separated format or standard CSV with headers"
+                icon={UploadCloud}
+              >
+                {/* Dataset Selection Bar */}
+                <div
+                  style={{
+                    marginBottom: '20px',
+                    padding: '14px 18px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-light)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
+                      Target C-MAPSS Fleet Sub-dataset
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      Selects calibrated PINN weights, flight regime clustering, and feature scalers
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {[
+                      { id: 'FD001', label: 'FD001', desc: '1 Cond (SL), 1 Fault (HPC), 14 feats' },
+                      { id: 'FD002', label: 'FD002', desc: '6 Regimes, 1 Fault (HPC), 18 feats' },
+                      { id: 'FD003', label: 'FD003', desc: '1 Cond (SL), 2 Faults (HPC+Fan), 15 feats' },
+                      { id: 'FD004', label: 'FD004', desc: '6 Regimes, 2 Faults (HPC+Fan), 19 feats' },
+                    ].map((ds) => (
+                      <button
+                        key={ds.id}
+                        type="button"
+                        onClick={() => handleDatasetChange(ds.id)}
+                        title={ds.desc}
+                        className={`btn btn-sm ${
+                          selectedDataset === ds.id ? 'btn-primary' : 'btn-secondary'
+                        }`}
+                        style={{ padding: '6px 14px' }}
+                      >
+                        {ds.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Drop Zone */}
+                <FileUploadZone
+                  onFileSelected={handleFileSelected}
+                  isUploading={isUploading}
+                  uploadProgress={uploadProgress}
+                  disabled={isUploading}
                 />
 
-                {/* Single Engine RUL Card */}
-                <EngineRulCard prediction={currentEnginePrediction} />
+                {/* Selected File Card */}
+                {selectedFile && (
+                  <FilePreviewCard
+                    file={selectedFile}
+                    rowCount={fileRowCount}
+                    onRemove={() => {
+                      setSelectedFile(null);
+                      setFileRowCount(null);
+                      setParsedSensorDataByEngine({});
+                      setParserNotice(null);
+                    }}
+                    onReplace={() => {
+                      setSelectedFile(null);
+                      setFileRowCount(null);
+                      setParsedSensorDataByEngine({});
+                      setParserNotice(null);
+                    }}
+                    disabled={isUploading}
+                  />
+                )}
 
-                {/* Recharts Trajectory & Sensor Visualizations */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                  {/* Trajectory Degradation Curve */}
+                {/* Action Buttons */}
+                <div
+                  style={{
+                    marginTop: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                  }}
+                >
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Payload target: <code>POST /predict?dataset={selectedDataset}</code> &bull; Real ML Pipeline
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSubmitPrediction}
+                    disabled={!selectedFile || isUploading}
+                    className="btn btn-primary btn-lg"
+                  >
+                    {isUploading ? (
+                      <LoadingSpinner inline size={16} text="Executing Inference..." />
+                    ) : (
+                      <>
+                        <Play size={16} />
+                        <span>Execute RUL Prediction</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Pre-validated test samples for easy evaluation */}
+                <SampleFileSelector
+                  onSelectSample={handleFileSelected}
+                  disabled={isUploading}
+                />
+              </Card>
+            </div>
+          )}
+
+          {/* TAB 3: RESULTS & SENSOR ANALYTICS */}
+          {activeTab === 'results' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                }}
+              >
+                <div>
+                  <h2
+                    style={{
+                      fontSize: '20px',
+                      fontWeight: 700,
+                      color: 'var(--text-main)',
+                      letterSpacing: '-0.01em',
+                    }}
+                  >
+                    Prediction Results & Degradation Analysis
+                  </h2>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Evaluated with {predictionResponse?.model_type || 'PINN'} ({predictionResponse?.model_version || health?.model_version || 'pinn-v1.0'}) for dataset {predictionResponse?.dataset || selectedDataset}.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('predict')}
+                  className="btn btn-secondary btn-sm"
+                >
+                  <RotateCcw size={13} />
+                  <span>Upload Another File</span>
+                </button>
+              </div>
+
+              {!predictionResponse ? (
+                <div className="card" style={{ padding: '56px 24px', textAlign: 'center' }}>
+                  <Activity size={40} style={{ color: 'var(--text-secondary)', margin: '0 auto 12px auto' }} />
+                  <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    No Prediction Active in Current Session
+                  </h3>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '8px 0 20px 0' }}>
+                    Upload a sensor telemetry CSV file or select a C-MAPSS sample to view remaining useful life estimations.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('predict')}
+                    className="btn btn-primary"
+                  >
+                    <UploadCloud size={16} />
+                    <span>Go to Upload Page</span>
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {/* Multi-Engine Selector (if fleet CSV) */}
+                  <EngineSelector
+                    predictions={predictionResponse.predictions}
+                    selectedEngineId={selectedEngineId}
+                    onSelectEngine={setSelectedEngineId}
+                  />
+
+                  {/* Single Engine RUL Card */}
+                  <EngineRulCard prediction={currentEnginePrediction} />
+
+                  {/* Degradation Trajectory Curve */}
                   <TrajectoryChart
                     trajectory={currentEnginePrediction?.trajectory}
                     engineId={currentEnginePrediction?.engine_id}
@@ -801,24 +803,16 @@ export default function App() {
                     engineId={currentEnginePrediction?.engine_id}
                   />
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
 
-        {/* TAB 4: MAINTENANCE & SCHEDULING (PHASE 4) */}
-        {activeTab === 'maintenance' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '12px',
-                marginBottom: '4px',
-              }}
-            >
+          {/* TAB 4: ANALYTICS & MODEL PERFORMANCE */}
+          {activeTab === 'analytics' && <AnalyticsView />}
+
+          {/* TAB 5: MAINTENANCE & SCHEDULING */}
+          {activeTab === 'maintenance' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div>
                 <h2
                   style={{
@@ -834,89 +828,102 @@ export default function App() {
                   Deterministic priority optimization under bay capacity limits, technician work orders, and audit trail.
                 </p>
               </div>
-            </div>
 
-            {/* Fleet Maintenance Scheduling Card */}
-            <FleetSchedulerCard
-              scheduleData={fleetSchedule}
-              onUpdateCapacity={handleUpdateScheduleCapacity}
-              onCreateWorkOrder={(item) => {
-                setWorkOrderPreFill({
-                  engine_id: item.engine_id,
-                  priority: item.priority,
-                  predicted_rul: item.predicted_rul,
-                  scheduled_cycle_target: item.scheduled_cycle_target,
-                  recommendation: `Priority ${item.priority} overhaul for Unit #${item.engine_id}. RUL: ${item.predicted_rul.toFixed(1)} cycles.`,
-                });
-              }}
-              isLoading={isScheduleLoading}
-            />
-
-            {/* Maintenance Work Orders CRUD View */}
-            <MaintenanceRecordsView
-              initialWorkOrderData={workOrderPreFill}
-              onClearInitial={() => setWorkOrderPreFill(null)}
-            />
-          </div>
-        )}
-
-        {/* TAB 5: PREDICTION HISTORY */}
-        {activeTab === 'history' && (
-          <div>
-            <div style={{ marginBottom: '20px' }}>
-              <h2
-                style={{
-                  fontSize: '20px',
-                  fontWeight: 700,
-                  color: 'var(--text-main)',
-                  letterSpacing: '-0.01em',
+              {/* Fleet Maintenance Scheduling Card */}
+              <FleetSchedulerCard
+                scheduleData={fleetSchedule}
+                onUpdateCapacity={handleUpdateScheduleCapacity}
+                onCreateWorkOrder={(item) => {
+                  setWorkOrderPreFill({
+                    engine_id: item.engine_id,
+                    priority: item.priority,
+                    predicted_rul: item.predicted_rul,
+                    scheduled_cycle_target: item.scheduled_cycle_target,
+                    recommendation: `Priority ${item.priority} overhaul for Unit #${item.engine_id}. RUL: ${item.predicted_rul.toFixed(1)} cycles.`,
+                  });
                 }}
-              >
-                Historical Prediction Records
-              </h2>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Persistent inference records retrieved from the database repository.
-              </p>
-            </div>
-
-            {/* Filter controls */}
-            <HistoryFilters
-              engineId={historyEngineFilter}
-              onEngineIdChange={setHistoryEngineFilter}
-              riskLevel={historyRiskFilter}
-              onRiskLevelChange={setHistoryRiskFilter}
-              totalRecords={historyTotal}
-              isLoading={isHistoryLoading}
-              onRefresh={fetchHistory}
-            />
-
-            {/* Table */}
-            <HistoryTable
-              records={historyRecords}
-              isLoading={isHistoryLoading}
-              error={historyError}
-            />
-
-            {/* Pagination */}
-            {historyTotal > 0 && (
-              <HistoryPagination
-                currentPage={historyPage}
-                totalPages={historyTotalPages}
-                pageSize={historyPageSize}
-                onPageChange={setHistoryPage}
-                onPageSizeChange={(newSize) => {
-                  setHistoryPageSize(newSize);
-                  setHistoryPage(1);
-                }}
-                disabled={isHistoryLoading}
+                isLoading={isScheduleLoading}
               />
-            )}
-          </div>
-        )}
-      </main>
 
-      {/* Footer */}
-      <Footer />
+              {/* Maintenance Work Orders CRUD View */}
+              <MaintenanceRecordsView
+                initialWorkOrderData={workOrderPreFill}
+                onClearInitial={() => setWorkOrderPreFill(null)}
+              />
+            </div>
+          )}
+
+          {/* TAB 6: EXPLAINABILITY */}
+          {activeTab === 'explainability' && (
+            <ExplainabilityView
+              predictionResponse={predictionResponse}
+              selectedEngineId={selectedEngineId}
+              onSelectEngine={setSelectedEngineId}
+              onNavigateToUpload={() => setActiveTab('predict')}
+            />
+          )}
+
+          {/* TAB 7: PREDICTION HISTORY */}
+          {activeTab === 'history' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div>
+                <h2
+                  style={{
+                    fontSize: '20px',
+                    fontWeight: 700,
+                    color: 'var(--text-main)',
+                    letterSpacing: '-0.01em',
+                  }}
+                >
+                  Historical Prediction Records
+                </h2>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Persistent inference records retrieved from the database repository.
+                </p>
+              </div>
+
+              {/* Filter controls */}
+              <HistoryFilters
+                engineId={historyEngineFilter}
+                onEngineIdChange={setHistoryEngineFilter}
+                riskLevel={historyRiskFilter}
+                onRiskLevelChange={setHistoryRiskFilter}
+                totalRecords={historyTotal}
+                isLoading={isHistoryLoading}
+                onRefresh={fetchHistory}
+              />
+
+              {/* Table */}
+              <HistoryTable
+                records={historyRecords}
+                isLoading={isHistoryLoading}
+                error={historyError}
+              />
+
+              {/* Pagination */}
+              {historyTotal > 0 && (
+                <HistoryPagination
+                  currentPage={historyPage}
+                  totalPages={historyTotalPages}
+                  pageSize={historyPageSize}
+                  onPageChange={setHistoryPage}
+                  onPageSizeChange={(newSize) => {
+                    setHistoryPageSize(newSize);
+                    setHistoryPage(1);
+                  }}
+                  disabled={isHistoryLoading}
+                />
+              )}
+            </div>
+          )}
+
+          {/* TAB 8: PROJECT INFO */}
+          {activeTab === 'project_info' && <ProjectInfoView />}
+        </main>
+
+        {/* Global Footer */}
+        <Footer />
+      </div>
     </div>
   );
 }

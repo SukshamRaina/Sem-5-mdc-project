@@ -73,20 +73,27 @@ $$D(t) = 1 - \frac{\widehat{\text{RUL}}(t)}{RUL_{\max}}$$
 
 ## 4. Governing Physics Equations & Constraints
 
-### 4.1 Degradation Rate Kinetic Law
-Mechanical damage in gas turbines (Paris-Erdogan fatigue crack propagation law, thermal barrier spallation, and compressor blade erosion) follows a non-linear wear rate driven by current state and operating stress:
-$$\frac{dD}{dt} = g_\theta(D(t), S(t), U(t))$$
+### 4.1 Degradation Kinetics & Rate Head Definition
+Turbofan gas-path component degradation (blade erosion, aerodynamic fouling, thermal barrier spallation, and fatigue crack growth) accumulates monotonically under operational stress.
 
-Where:
-- $g_\theta$ is a parameterized neural network rate function representing the degradation kinetics.
-- $S(t)$ is the vector of condition-normalized sensor telemetry.
-- $U(t)$ is the operational regime vector.
+In our physics-constrained empirical degradation model, the neural network predicts:
+1. **Remaining Useful Life**: $\widehat{\text{RUL}}(X, t)$ via an unconstrained linear head (bias init $+60.0$) in physical units of $[\text{cycles}]$.
+2. **Instantaneous Degradation Rate**: $g_\theta(X, t) \ge 0$ via a Softplus activation head in dimensionless units of $[\text{cycles of RUL} / \text{flight cycle}]$.
 
-Differentiating $\widehat{\text{RUL}}(t)$ with respect to operational cycle $t$:
-$$\frac{\partial \widehat{\text{RUL}}}{\partial t} = -RUL_{\max} \cdot \frac{dD}{dt} = -RUL_{\max} \cdot g_\theta(D(t), S(t), U(t))$$
+The governing ordinary differential equation (ODE) is:
+$$\frac{d(\widehat{\text{RUL}})}{dt} = -g_\theta(X(t), t), \quad g_\theta(X(t), t) \ge 0$$
 
-Rearranging yields the **Governing Residual Balance**:
-$$-\frac{\partial \widehat{\text{RUL}}}{\partial t} - RUL_{\max} \cdot g_\theta(S(t), U(t)) = 0$$
+#### Relationship to Latent Damage Index $D(t)$:
+Let $D(t) \in [0, 1]$ denote the normalized latent damage index ($0.0 = \text{nominal new}$, $1.0 = \text{failure threshold}$):
+$$D(t) = 1.0 - \frac{\widehat{\text{RUL}}(t)}{RUL_{\max}}, \quad RUL_{\max} = 125.0 \text{ cycles}$$
+
+Differentiating with respect to operational flight cycles $t$:
+$$\frac{dD}{dt} = -\frac{1}{RUL_{\max}} \frac{d(\widehat{\text{RUL}})}{dt} = \frac{g_\theta(X(t), t)}{RUL_{\max}} \quad \left[\frac{1}{\text{cycle}}\right]$$
+
+Thus, the neural network's rate head $g_\theta(X, t)$ represents the **direct RUL consumption rate** ($[\text{cycles}/\text{cycle}]$), while $\frac{g_\theta}{RUL_{\max}}$ represents the fractional damage accumulation rate ($[1/\text{cycle}]$).
+
+Rearranging the governing ODE yields the **Dimensionally Balanced Physics Residual**:
+$$\mathcal{R}_{\text{phys}} = \frac{d(\widehat{\text{RUL}})}{dt} + g_\theta(X(t), t) = 0$$
 
 ### 4.2 Monotonicity Constraint (Irreversible Entropy / Damage)
 In the absence of physical depot overhaul or component replacement, mechanical degradation is thermodynamically irreversible:

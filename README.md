@@ -83,13 +83,19 @@ The network is trained end-to-end minimizing:
 
 $$\mathcal{L}_{total} = \mathcal{L}_{data} + \lambda_{phys} \mathcal{L}_{phys} + \lambda_{mono} \mathcal{L}_{mono} + \lambda_{bound} \mathcal{L}_{bound}$$
 
-1. **Supervised Data Loss**: Smooth Huber loss between predicted and ground-truth piecewise linear RUL targets ($RUL_{max} = 125$).
-2. **Physics Residual Loss**: Mean squared error penalizing departure from the wear ODE:
+1. **Supervised Data Loss ($\mathcal{L}_{data}$)**: Smooth Huber loss between predicted and ground-truth piecewise linear RUL targets ($RUL_{max} = 125$).
+2. **Physics Residual Loss ($\mathcal{L}_{phys}$)**: Mean squared error penalizing departure from the wear kinetics ODE:
    $$\mathcal{L}_{phys} = \frac{1}{B} \sum_{i=1}^B \left( \frac{1}{100} \frac{\partial \widehat{\text{RUL}}_i}{\partial t_{norm, i}} + g_\theta(X_i, t_i) \right)^2$$
-3. **Monotonicity Regularization**: Penalizes any positive derivative with respect to operational time:
+3. **Monotonicity Regularization ($\mathcal{L}_{mono}$)**: Penalizes unphysical positive derivatives with respect to operational time:
    $$\mathcal{L}_{mono} = \frac{1}{B} \sum_{i=1}^B \max\left(0, \frac{\partial \widehat{\text{RUL}}_i}{\partial t_{norm, i}}\right)^2$$
-4. **Boundary Condition Regularization**: Enforces non-negative physical RUL predictions:
+4. **Boundary Condition Regularization ($\mathcal{L}_{bound}$)**: Penalizes unphysical negative RUL predictions:
    $$\mathcal{L}_{bound} = \frac{1}{B} \sum_{i=1}^B \max(0, -\widehat{\text{RUL}}_i)^2$$
+
+**Calibrated Loss Hyperparameters**: $\lambda_{phys} = 0.1$, $\lambda_{mono} = 0.1$, $\lambda_{bound} = 0.05$ (identical across FD001–FD004).
+
+#### Relationship to Latent Damage Index $D(t)$:
+The normalized latent damage index $D(t) \in [0, 1]$ represents component life consumed ($0.0 = \text{nominal new}$, $1.0 = \text{retirement threshold}$):
+$$D(t) = \max\left(0.0, \min\left(1.0, 1.0 - \frac{\widehat{\text{RUL}}(t)}{RUL_{max}}\right)\right), \quad \frac{dD}{dt} = \frac{g_\theta(X, t)}{RUL_{max}} \quad \left[\frac{1}{\text{cycle}}\right]$$
 
 ### Neural Architecture
 - **Input Dimension**: Dual-input representation taking temporal telemetry sequence $X \in \mathbb{R}^{B \times 30 \times F}$ and scalar normalized time coordinate $t_{norm} \in \mathbb{R}^{B \times 1}$.
@@ -174,6 +180,10 @@ $$\nabla_X \widehat{\text{RUL}} = \frac{\partial \widehat{\text{RUL}}}{\partial 
 - Latency is **< 15 milliseconds** per engine.
 - Combined with empirical linear sensor drift slopes ($\text{units/cycle}$) and mapped to physical turbofan subsystems (LPC, HPC, LPT, Fan, Cooling Bleed).
 
+> [!NOTE]
+> **Directional Sensitivity vs. Causal Intervention**:
+> Gradient sensitivity quantifies the local linear directional sensitivity of the RUL prediction with respect to input telemetry variations at the current operating point. It highlights which sensor channels most actively influence the network's output; it does not claim to represent counterfactual causal mechanisms or replace physical metallurgical failure analysis.
+
 ### Latent Degradation State $D(t)$
 In addition to remaining flight cycles, the PINN outputs a normalized latent degradation index:
 
@@ -193,6 +203,10 @@ When multiple engines require maintenance, slots are allocated deterministically
 2. Remaining Useful Life ascending (engines closest to failure scheduled first).
 3. Operating Cycles descending (older components prioritized).
 4. Engine ID ascending (ensures strict reproducibility).
+
+> [!NOTE]
+> **Heuristic Decision Support**:
+> Risk thresholds and fleet maintenance scheduling are deterministic rule-based algorithms designed for prototype academic demonstration, not certified aviation dispatch or MRO (Maintenance, Repair, and Overhaul) scheduling systems.
 
 ---
 
@@ -222,53 +236,64 @@ The FastAPI backend provides full multi-dataset isolation with in-memory model c
 - Node.js 18+ & npm
 - TensorFlow 2.16+ (Tested on TensorFlow 2.21)
 
-### Step 1: Environment Setup
+### Environment Setup
 ```bash
-# Clone repository
+# 1. Clone repository
 git clone https://github.com/SukshamRaina/Sem-5-mdc-project.git
 cd Sem-5-mdc-project
 
-# Install backend dependencies
+# 2. Create and activate Python virtual environment
+python -m venv venv
+# On Windows PowerShell:
+.\venv\Scripts\Activate.ps1
+# On Linux/macOS:
+source venv/bin/activate
+
+# 3. Install backend dependencies
 pip install -r backend/requirements.txt
+
+# 4. Configure environment variables (optional)
+cp backend/.env.example backend/.env
+# Note: Supabase credentials are optional. If omitted, the backend automatically uses a thread-safe in-memory store for session persistence.
 ```
 
-### Step 2: Ingest NASA C-MAPSS Datasets
+> [!IMPORTANT]
+> **Pre-Trained Artifacts Included**:
+> Trained PINN models, scalers, feature column mappings, and metadata for all four subsets (**FD001, FD002, FD003, FD004**) as well as the baseline LSTM are already preserved under `backend/artifacts/`. **Retraining is NOT required to evaluate or run the full platform.**
+
+### Option A: Quickstart with Pre-Trained Models (Recommended for Evaluation)
+
 ```bash
-python backend/ml_pipeline/ingest_data.py
-```
-This discovers, validates, and stages raw telemetry files for FD001, FD002, FD003, and FD004.
-
-### Step 3: Train & Evaluate PINN Models
-To train the PINN on a specific dataset or all datasets:
-```bash
-# Train on FD001
-python backend/ml_pipeline/train_pinn.py --dataset FD001 --epochs 40 --batch-size 64
-
-# Train across all datasets
-python backend/ml_pipeline/train_pinn.py --dataset all --epochs 40
-
-# Run comprehensive evaluation benchmark
-python backend/ml_pipeline/evaluate_pinn.py --dataset all
-```
-Artifacts are automatically isolated under `backend/artifacts/pinn/FD00X/`.
-
-### Step 4: Run the Automated Backend Regression Suite
-```bash
-# Run all 36 backend tests (API, Models, Preprocessing, Phase 4, PINN)
+# Step 1: Run the automated backend regression suite (all 36 tests)
 python -m pytest backend/tests/ -v
-```
 
-### Step 5: Start the Full Stack Application
-```bash
-# Terminal 1: Start FastAPI Backend
+# Step 2: Start the FastAPI backend server (Terminal 1)
 uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 
-# Terminal 2: Start React Frontend Dashboard
+# Step 3: Install frontend dependencies and start React dashboard (Terminal 2)
 cd frontend
 npm install
 npm run dev
 ```
-Open [http://localhost:5173](http://localhost:5173) to access the interactive dashboard with multi-dataset selection.
+Open [http://localhost:5173](http://localhost:5173) in your browser. Use the interactive dataset selector and built-in sample quick-test selectors (`sample_FD001_engine_1.csv` through `sample_FD004_engine_1.csv`) to test live inference.
+
+### Option B: Data Ingestion & Model Retraining (Optional)
+
+If you wish to retrain or benchmark models from raw NASA C-MAPSS telemetry:
+```bash
+# 1. Ingest, validate, and stage raw text files
+python backend/ml_pipeline/ingest_data.py
+
+# 2. Train PINN on a specific dataset (e.g. FD001)
+python backend/ml_pipeline/train_pinn.py --dataset FD001 --epochs 40 --batch-size 64
+
+# 3. Train across all datasets sequentially
+python backend/ml_pipeline/train_pinn.py --dataset all --epochs 40
+
+# 4. Run full benchmark evaluation across FD001-FD004
+python backend/ml_pipeline/evaluate_pinn.py --dataset all
+```
+Newly generated checkpoints and evaluation plots will be saved to `backend/artifacts/pinn/FD00X/`.
 
 ---
 
@@ -284,8 +309,11 @@ Legacy requests or offline evaluation scripts can continue to invoke the LSTM ba
 
 ---
 
-## 9. Limitations & Research Frontiers
+## 9. Limitations & Scientific Boundaries
 
-1. **Discrete Sliding-Window Fluctuations**: While the underlying wear rate $g_\theta(X, t) \ge 0$ is non-negative and derivative regularization penalizes increases, high-frequency sensor noise in individual raw cycles can produce short-term RUL fluctuations unless an exponential moving average (EMA) filter is applied.
-2. **Simplified Operational Regimes**: For FD002 and FD004, operating regimes are modeled via 6-cluster K-Means over flight settings ($Alt, Mach, TRA$). In full flight controllers, continuous aerothermal map interpolations are utilized.
-3. **Piecewise Target Saturation & Linear Head Variance**: In accordance with the standard NASA C-MAPSS benchmark methodology, early-life training targets are capped at 125 cycles. Because the PINN employs an unconstrained linear output head (ensuring smooth automatic differentiation gradient flow without saturation), raw neural network predictions for early-life engines near the initial plateau naturally exhibit minor regression variance around 125 (e.g., 125.3 on FD003, 127.0 on FD004). The API and frontend preserve these raw linear predictions without artificial post-hoc clamping.
+1. **Empirical Kinetics vs. First-Principles Aerothermodynamics**: The PINN is a physics-constrained empirical degradation model governed by an ordinary differential equation wear law. It is not a 3D computational fluid dynamics (CFD) or finite element structural analysis (FEA) solver.
+2. **Discrete Sliding-Window Trajectory Noise**: While the continuous automatic differentiation loss penalizes positive derivatives ($\mathcal{L}_{mono}$) and the rate head is strictly non-negative ($g_\theta \ge 0$), discrete sliding-window telemetry from real-world sensors exhibits high-frequency noise. Consecutive raw cycle predictions may experience short-term fluctuations unless filtered through downstream moving-average (EMA) smoothing.
+3. **Local Gradient Sensitivity vs. Causal Mechanics**: Subsystem attributions are derived via `tf.GradientTape` input gradients. They represent local first-order sensitivity around the input point, not counterfactual physical interventions or certified teardown diagnostics.
+4. **Deterministic Point Predictions & Estimated Bounds**: The neural network outputs deterministic point estimates for RUL and degradation rate. The platform does not implement Bayesian posterior sampling, conformal prediction, or statistical confidence intervals; any displayed ranges are deterministic heuristic bounds based on operational drift.
+5. **Piecewise Target Saturation & Linear Head Variance**: In accordance with the standard NASA C-MAPSS benchmark methodology, early-life training targets are capped at 125 cycles. Because the PINN employs an unconstrained linear output head (ensuring smooth automatic differentiation gradient flow without saturation), raw neural network predictions for early-life engines near the initial plateau naturally exhibit minor regression variance around 125 (e.g., 125.3 on FD003, 127.0 on FD004). The API and frontend preserve these raw linear predictions without artificial post-hoc clamping.
+6. **Operating Regime Discretization**: For FD002 and FD004, operating regimes are partitioned via 6-cluster K-Means over flight settings ($Alt, Mach, TRA$). Full aero-engine digital electronic controllers use continuous thermodynamic altitude-Mach lookup maps.

@@ -53,16 +53,27 @@ Metrics evaluated:
 
 ## 4. Comparison: PINN vs. Legacy Stacked LSTM (FD001 Baseline)
 
-| Metric | Legacy Stacked LSTM | Physics-Informed Neural Network (PINN) | Improvement / Delta |
+Both models were audited on identical FD001 test engines across both raw targets and standard 125-clipped targets:
+
+### 4.1 Raw Unclipped Target Convention
+| Metric | Legacy Stacked LSTM | Physics-Informed Neural Network (PINN) | Delta / Comparison |
 | :--- | :---: | :---: | :---: |
-| **Architecture** | Unconstrained LSTM (2 layers, 100/50 units) | Dual-head Conv1D-GRU + Automatic Differentiation ODE Head | Physical consistency guaranteed |
-| **Multi-Dataset Support** | FD001 only (failed on FD002–FD004) | Full native support for **FD001, FD002, FD003, FD004** | Complete cross-fleet prognostic coverage |
-| **Test RMSE (cycles)** | 17.52 | **14.34** | **-18.1% error reduction** |
-| **Test MAE (cycles)** | 13.14 | **10.33** | **-21.4% error reduction** |
-| **R² Score** | 0.8120 | **0.8810** | **+8.5% variance explained** |
-| **NASA Score** | 463.20 | **327.81** | **-29.2% penalty reduction** |
-| **Monotonicity** | Unconstrained (occasional negative wear / recovery) | Penalized via $L_{mono} = \text{mean}(\max(0, \frac{d(RUL)}{dt})^2)$ | Zero non-physical self-healing |
+| **Architecture** | Unconstrained LSTM (2 layers, 100/50 units) | Dual-head Conv1D-GRU + Automatic Differentiation ODE Head | Physical consistency regularized |
+| **Multi-Dataset Support** | FD001 only (not supported on FD002–FD004) | Full native support for **FD001, FD002, FD003, FD004** | Complete cross-fleet prognostic coverage |
+| **Test RMSE (cycles)** | 14.493 | **14.335** | **-0.158 (-1.1% error reduction)** |
+| **Test MAE (cycles)** | 11.244 | **10.328** | **-0.916 (-8.1% error reduction)** |
+| **R² Score** | 0.8784 | **0.8810** | **+0.0026 (+0.3% variance explained)** |
+| **NASA Score** | **319.76** | 327.81 | +8.05 (LSTM achieves lower asymmetric penalty) |
+| **Continuous Derivative Regularization** | None (unconstrained) | Penalized via $\mathcal{L}_{mono} = \text{mean}(\max(0, \frac{d\widehat{RUL}}{dt})^2)$ | Continuous wear rate constrained |
 | **Latent State Tracking** | None | Latent Damage $D(t) \in [0, 1]$ and Degradation Rate $g_\theta$ | Transparent physical degradation telemetry |
+
+> [!NOTE]
+> **NASA Score Interpretation**:
+> The NASA PHM 2008 scoring metric exponentially penalizes late predictions ($\hat{y} > y$) via $e^{d/10}-1$ versus early predictions via $e^{-d/13}-1$. While the PINN achieves superior overall precision (lower RMSE, lower MAE, higher $R^2$), the legacy LSTM produced a slightly lower NASA score (319.76 vs 327.81) due to slightly more conservative skew on a handful of high-RUL engines.
+>
+> Under the standard 125-clipped target convention, the PINN outperforms the LSTM across all four metrics:
+> - **Legacy LSTM**: RMSE = 13.097, MAE = 10.174, $R^2 = 0.8932$, NASA Score = 280.94
+> - **FD001 PINN**: RMSE = **12.762**, MAE = **9.258**, $R^2 = \mathbf{0.8986}$, NASA Score = **273.82**
 
 ---
 

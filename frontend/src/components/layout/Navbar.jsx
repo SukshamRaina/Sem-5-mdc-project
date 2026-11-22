@@ -1,9 +1,13 @@
+import React from 'react';
 import {
   LayoutDashboard,
   UploadCloud,
   LineChart,
-  History,
+  BarChart3,
   Wrench,
+  Brain,
+  History,
+  Info,
 } from 'lucide-react';
 
 export default function Navbar({
@@ -29,14 +33,29 @@ export default function Navbar({
       badge: hasActivePrediction ? 'Active' : null,
     },
     {
+      id: 'analytics',
+      label: 'Model Benchmarks',
+      icon: BarChart3,
+    },
+    {
       id: 'maintenance',
       label: 'Maintenance & Scheduling',
       icon: Wrench,
     },
     {
+      id: 'explainability',
+      label: 'Feature Attribution',
+      icon: Brain,
+    },
+    {
       id: 'history',
       label: 'Prediction History',
       icon: History,
+    },
+    {
+      id: 'project_info',
+      label: 'Project Info',
+      icon: Info,
     },
   ];
 
@@ -49,6 +68,7 @@ export default function Navbar({
           return (
             <button
               key={tab.id}
+              type="button"
               onClick={() => onTabChange(tab.id)}
               className={`nav-tab ${isActive ? 'active' : ''}`}
             >
@@ -57,12 +77,13 @@ export default function Navbar({
               {tab.badge && (
                 <span
                   style={{
-                    backgroundColor: 'var(--primary-100)',
-                    color: 'var(--primary-700)',
+                    backgroundColor: 'rgba(14, 165, 233, 0.25)',
+                    color: 'var(--accent-cyan)',
                     fontSize: '10px',
                     fontWeight: 700,
                     padding: '1px 6px',
                     borderRadius: 'var(--radius-full)',
+                    border: '1px solid rgba(56, 189, 248, 0.4)',
                   }}
                 >
                   {tab.badge}

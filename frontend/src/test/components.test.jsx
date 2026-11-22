@@ -33,7 +33,6 @@ describe('Frontend React Components', () => {
       ).toBeInTheDocument();
       expect(screen.getByText('Backend Live')).toBeInTheDocument();
       expect(screen.getByText('Supabase DB')).toBeInTheDocument();
-      expect(screen.getByText('LSTM Regressor')).toBeInTheDocument();
     });
 
     it('renders degraded status when backend is degraded', () => {

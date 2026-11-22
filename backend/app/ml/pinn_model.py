@@ -1,12 +1,15 @@
 """
 Physics-Informed Neural Network (PINN) Model for Turbofan Engine Remaining Useful Life.
 
-Formulation:
-- Ordinary Differential Equation (ODE) governing latent mechanical degradation:
-    d(RUL)/dt = -RUL_max * g_theta(X, t)
+Formulation (Physics-Constrained Empirical Degradation Model):
+- Ordinary Differential Equation (ODE) governing component degradation kinetics:
+    d(RUL)/dt = -g_theta(X, t),  g_theta(X, t) >= 0
+  where g_theta(X, t) represents instantaneous RUL degradation rate in [cycles/cycle].
+- Derived latent damage state D(t) in [0, 1]:
+    D(t) = 1.0 - RUL(t) / RUL_max,  dD/dt = g_theta(X, t) / RUL_max [1/cycle].
 - Exact automatic differentiation of d(RUL)/dt with respect to continuous operational time t.
 - Physical Monotonicity Constraint: d(RUL)/dt <= 0 (irreversible mechanical wear / no in-flight healing).
-- Boundary Constraints: Non-negative RUL (ReLU projection).
+- Boundary Constraints: Non-negative RUL (linear head with bias init +60.0, bounded by L_bound and inference clipping).
 - Composite Loss: L_total = L_data + lambda_physics * L_physics + lambda_mono * L_mono + lambda_bound * L_bound.
 """
 
@@ -33,8 +36,9 @@ def build_pinn_model(
 ) -> keras.Model:
     """
     Constructs a dual-head Physics-Informed Neural Network architecture:
-    1. Primary Head: Predicts Remaining Useful Life (RUL >= 0) via ReLU projection.
-    2. Physics Head: Predicts latent degradation rate g_theta(X, t) >= 0 via Softplus.
+    1. Primary Head: Predicts Remaining Useful Life via unconstrained linear dense layer (bias init +60.0),
+       ensuring continuous automatic differentiation gradient flow without saturation; bounded by L_bound and inference clipping.
+    2. Physics Head: Predicts instantaneous RUL degradation rate g_theta(X, t) >= 0 via Softplus.
     """
     # Inputs: 3D temporal sequence and 1D continuous operational time coordinate
     sensor_sequence_input = keras.layers.Input(
